@@ -59,6 +59,8 @@
 #else
 #define RD_EXPORT __declspec(dllimport)
 #endif
+#undef RD_EXPORT
+#define RD_EXPORT
 #else
 #define RD_EXPORT
 #endif

@@ -66,6 +66,8 @@ typedef SSIZE_T ssize_t;
 #else
 #define RD_EXPORT __declspec(dllimport)
 #endif
+#undef RD_EXPORT
+#define RD_EXPORT extern
 
 #else
 #define RD_UNUSED __attribute__((unused))
