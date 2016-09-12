@@ -147,15 +147,16 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 				    int flags, int family,
 				    int socktype, int protocol,
 				    const char **errstr) {
-	struct addrinfo hints = { .ai_family = family,
-				  .ai_socktype = socktype,
-				  .ai_protocol = protocol,
-				  .ai_flags = flags };
+	struct addrinfo hints;
 	struct addrinfo *ais, *ai;
 	char *node, *svc;
 	int r;
 	int cnt = 0;
 	rd_sockaddr_list_t *rsal;
+	hints.ai_family = family;
+	hints.ai_socktype = socktype;
+	hints.ai_protocol = protocol;
+	hints.ai_flags = flags;
 
 	if ((*errstr = rd_addrinfo_prepare(nodesvc, &node, &svc))) {
 		errno = EINVAL;

@@ -44,7 +44,7 @@
 #pragma once
 
 #include <stdio.h>
-#include <inttypes.h>
+//#include <inttypes.h>
 #include <sys/types.h>
 
 #ifdef __cplusplus
@@ -55,6 +55,7 @@ extern "C" {
 #endif
 
 #ifdef _MSC_VER
+#include "rdwin32.h"
 #include <basetsd.h>
 typedef SSIZE_T ssize_t;
 #define RD_UNUSED

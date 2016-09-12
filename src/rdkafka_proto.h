@@ -84,6 +84,7 @@ struct rd_kafkap_reshdr {
 
 
 
+#ifndef _MSC_VER
 static RD_UNUSED
 const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 	static const char *names[] = {
@@ -115,6 +116,7 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 
 	return names[ApiKey];
 }
+#endif
 
 
 

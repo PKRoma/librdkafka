@@ -56,7 +56,7 @@ static RD_UNUSED void rd_avg_rollover (rd_avg_t *dst,
                 rd_ts_t elapsed = now - dst->ra_v.start;
 
                 if (elapsed)
-                        dst->ra_v.avg = (dst->ra_v.sum * 1000000llu) / elapsed;
+                        dst->ra_v.avg = (dst->ra_v.sum * 1000000ll) / elapsed;
                 else
                         dst->ra_v.avg = 0;
 
