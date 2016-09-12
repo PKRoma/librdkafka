@@ -47,8 +47,13 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	rd_kafka_transport_t *rkb_transport;
 
 	uint32_t            rkb_corrid;
+	int                 rkb_connid;    /* Connection id, increased by
+					    * one for each connection by
+					    * this broker. Used as a safe-guard
+					    * to help troubleshooting buffer
+					    * problems across disconnects. */
 
-	rd_kafka_q_t        rkb_ops;
+	rd_kafka_q_t       *rkb_ops;
 
         /* Toppars handled by this broker */
 	TAILQ_HEAD(, rd_kafka_toppar_s) rkb_toppars;
@@ -274,7 +279,7 @@ void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
 void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
                                      int16_t ApiKey,
                                      rd_kafka_buf_t *rkbuf,
-                                     rd_kafka_q_t *replyq,
+                                     rd_kafka_replyq_t replyq,
                                      rd_kafka_resp_cb_t *resp_cb,
                                      void *opaque);
 
@@ -283,7 +288,7 @@ void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf);
 void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
                                    int all_topics,
                                    rd_kafka_itopic_t *only_rkt,
-                                   rd_kafka_q_t *replyq,
+                                   rd_kafka_replyq_t replyq,
                                    const char *reason);
 
 
@@ -295,5 +300,7 @@ void msghdr_print (rd_kafka_t *rk,
 
 const char *rd_kafka_broker_name (rd_kafka_broker_t *rkb);
 
-int rd_kafka_brokers_wait_state_change (rd_kafka_t *rk, int timeout_ms);
+int rd_kafka_brokers_get_state_version (rd_kafka_t *rk);
+int rd_kafka_brokers_wait_state_change (rd_kafka_t *rk, int stored_version,
+					int timeout_ms);
 void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk);

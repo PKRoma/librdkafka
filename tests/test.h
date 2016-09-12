@@ -109,6 +109,7 @@ extern int test_broker_version;
 
 #define TEST_FAIL0(fail_now,...) do {					\
                 int is_thrd = 0;                                        \
+		TEST_SAYL(0, "TEST FAILURE\n");				\
 		fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n", \
 			test_curr->name,                                \
                         __FILE__,__LINE__,__FUNCTION__);                \
@@ -483,6 +484,8 @@ void test_consumer_assign (const char *what, rd_kafka_t *rk,
 void test_consumer_unassign (const char *what, rd_kafka_t *rk);
 
 void test_consumer_close (rd_kafka_t *rk);
+
+void test_flush (rd_kafka_t *rk, int timeout_ms);
 
 void test_conf_set (rd_kafka_conf_t *conf, const char *name, const char *val);
 char *test_conf_get (rd_kafka_conf_t *conf, const char *name);

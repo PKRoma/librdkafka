@@ -5,7 +5,6 @@
 #
 # Requires:
 #  trivup python module
-#  Kafka git clone (kafka_path below)
 #  gradle in your PATH
 
 from trivup.trivup import Cluster
@@ -23,13 +22,8 @@ import argparse
 import json
 
 
-# Path to Kafka git clone
-kafka_path='/home/maglun/src/kafka'
-
-
-
 def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=1,
-                  root_path='tmp'):
+                  root_path='tmp', broker_cnt=3):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
@@ -37,29 +31,28 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
 
     print('## Test version %s' % version)
     
-    cluster = Cluster('librdkafkaInteractiveBrokerVersionTests', root_path, debug=debug)
+    cluster = Cluster('LibrdkafkaTestCluster', root_path, debug=debug)
 
     # Enable SSL if desired
     if 'SSL' in conf.get('security.protocol', ''):
         cluster.ssl = SslApp(cluster, conf)
 
     # One ZK (from Kafka repo)
-    zk1 = ZookeeperApp(cluster, bin_path=kafka_path + '/bin/zookeeper-server-start.sh')
+    zk1 = ZookeeperApp(cluster)
     zk_address = zk1.get('address')
 
     # Start Kerberos KDC if GSSAPI is configured
     if 'GSSAPI' in args.conf.get('sasl_mechanisms', []):
         KerberosKdcApp(cluster, 'MYREALM').start()
 
-    # Three brokers
-    defconf = {'replication_factor': 3, 'num_partitions': 4, 'version': version}
+    defconf = {'replication_factor': min(broker_cnt, 3), 'num_partitions': 4, 'version': version}
     defconf.update(conf)
 
     print('conf: ', defconf)
 
-    broker1 = KafkaBrokerApp(cluster, defconf, kafka_path=kafka_path)
-    broker2 = KafkaBrokerApp(cluster, defconf, kafka_path=kafka_path)
-    broker3 = KafkaBrokerApp(cluster, defconf, kafka_path=kafka_path)
+    brokers = []
+    for n in range(0, broker_cnt):
+        brokers.append(KafkaBrokerApp(cluster, defconf))
 
     # Generate test config file
     security_protocol='PLAINTEXT'
@@ -114,20 +107,20 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     else:
         print('# Not deploying')
 
-    print('# Starting cluster')
+    print('# Starting cluster, instance path %s' % cluster.instance_path())
     cluster.start()
 
     print('# Waiting for brokers to come up')
 
     if not cluster.wait_operational(30):
         cluster.stop(force=True)
-        raise Exception('Cluster did not go operational, see logs in %s' % \
-                        (cluster.root_path))
+        raise Exception('Cluster %s did not go operational, see logs in %s/%s' % \
+                        (cluster.name, cluster.root_path, cluster.instance))
 
     print('# Connect to cluster with bootstrap.servers %s' % bootstrap_servers)
 
-    cmd_env = 'export KAFKA_PATH=%s RDKAFKA_TEST_CONF=%s ZK_ADDRESS=%s BROKERS=%s TEST_KAFKA_VERSION=%s;' % \
-              (broker1.conf.get('destdir'), test_conf_file, zk_address, bootstrap_servers, version)
+    cmd_env = 'export KAFKA_PATH="%s" RDKAFKA_TEST_CONF="%s" ZK_ADDRESS="%s" BROKERS="%s" TEST_KAFKA_VERSION="%s" TRIVUP_ROOT="%s"; ' % \
+              (brokers[0].conf.get('destdir'), test_conf_file, zk_address, bootstrap_servers, version, cluster.instance_path())
     if not cmd:
         cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version)
     for i in range(0, exec_cnt):
@@ -156,7 +149,13 @@ if __name__ == '__main__':
                         help='Number of times to execute -c ..')
     parser.add_argument('--debug', action='store_true', dest='debug', default=False,
                         help='Enable trivup debugging')
-    parser.add_argument('--root', type=str, default='tmp', help='Root working directory')
+    parser.add_argument('--root', type=str, default=os.environ.get('TRIVUP_ROOT', 'tmp'), help='Root working directory')
+    parser.add_argument('--port', default=None, help='Base TCP port to start allocating from')
+    parser.add_argument('--kafka-src', dest='kafka_path', type=str, default=None, help='Path to Kafka git repo checkout (used for version=trunk)')
+    parser.add_argument('--brokers', dest='broker_cnt', type=int, default=3, help='Number of Kafka brokers')
+    parser.add_argument('--ssl', dest='ssl', action='store_true', default=False,
+                        help='Enable SSL endpoints')
+    parser.add_argument('--sasl', dest='sasl', type=str, default=None, help='SASL mechanism (PLAIN, GSSAPI)')
 
     args = parser.parse_args()
     if args.conf is not None:
@@ -164,7 +163,20 @@ if __name__ == '__main__':
     else:
         args.conf = {}
 
+    if args.port is not None:
+        args.conf['port_base'] = int(args.port)
+    if args.kafka_path is not None:
+        args.conf['kafka_path'] = args.kafka_path
+    if args.ssl:
+        args.conf['security.protocol'] = 'SSL'
+    if args.sasl:
+        if args.sasl == 'PLAIN' and 'sasl_users' not in args.conf:
+            args.conf['sasl_users'] = 'testuser=testpass'
+        args.conf['sasl_mechanisms'] = args.sasl
+
+    args.conf['conf'] = ["log.retention.bytes=1000000000"]
+
     for version in args.versions:
         test_version(version, cmd=args.cmd, deploy=args.deploy,
                      conf=args.conf, debug=args.debug, exec_cnt=args.exec_cnt,
-                     root_path=args.root)
+                     root_path=args.root, broker_cnt=args.broker_cnt)

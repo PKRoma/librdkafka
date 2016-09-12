@@ -34,7 +34,6 @@
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 
 #define RD_KAFKA_HEADERS_IOV_CNT   2
-#define RD_KAFKA_PAYLOAD_IOV_MAX  (IOV_MAX-RD_KAFKA_HEADERS_IOV_CNT)
 
 /* Align X (upwards) to STRIDE, which must be power of 2. */
 #define _ALIGN(X,STRIDE) (((X) + ((STRIDE) - 1)) & -(STRIDE))
@@ -228,6 +227,8 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	struct msghdr rkbuf_msg;
 	struct iovec *rkbuf_iov;
 	int           rkbuf_iovcnt;
+	int     rkbuf_connid;      /* broker connection id (used when buffer
+				    * was partially sent). */
 	size_t  rkbuf_of;          /* send: send offset,
 				    * recv: parse offset */
 	size_t  rkbuf_len;         /* send: total length,
@@ -256,7 +257,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 
 	int32_t rkbuf_expected_size;  /* expected size of message */
 
-        rd_kafka_q_t       *rkbuf_replyq;       /* Enqueue response on replyq */
+        rd_kafka_replyq_t   rkbuf_replyq;       /* Enqueue response on replyq */
         rd_kafka_resp_cb_t *rkbuf_cb;           /* Response callback */
         struct rd_kafka_buf_s *rkbuf_response;  /* Response buffer */
 
@@ -276,7 +277,6 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 
         int64_t rkbuf_offset;     /* Used by OffsetCommit */
 
-	int32_t rkbuf_op_version;      /* Single Op version */
 	rd_list_t *rkbuf_rktp_vers;    /* Toppar + Op Version map.
 					* Used by FetchRequest. */
 

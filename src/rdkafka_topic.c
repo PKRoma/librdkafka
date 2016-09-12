@@ -631,7 +631,8 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
         int old_state;
 
 	/* Ignore topics in blacklist */
-        if (rd_kafka_pattern_match(&rkb->rkb_rk->rk_conf.topic_blacklist,
+        if (rkb->rkb_rk->rk_conf.topic_blacklist &&
+	    rd_kafka_pattern_match(rkb->rkb_rk->rk_conf.topic_blacklist,
                                    mdt->topic)) {
                 rd_rkb_dbg(rkb, TOPIC, "BLACKLIST",
                            "Ignoring blacklisted topic \"%s\" in metadata",
@@ -892,16 +893,24 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 
 		for (p = RD_KAFKA_PARTITION_UA ;
 		     p < rkt->rkt_partition_cnt ; p++) {
+			int did_tmout = 0;
+
 			if (!(s_rktp = rd_kafka_toppar_get(rkt, p, 0)))
 				continue;
 
                         rktp = rd_kafka_toppar_s2i(s_rktp);
 			rd_kafka_toppar_lock(rktp);
 
-			/* Scan toppar's message queue for timeouts */
+			/* Scan toppar's message queues for timeouts */
+			if (rd_kafka_msgq_age_scan(&rktp->rktp_xmit_msgq,
+						   &timedout, now) > 0)
+				did_tmout = 1;
+
 			if (rd_kafka_msgq_age_scan(&rktp->rktp_msgq,
 						   &timedout, now) > 0)
-				tpcnt++;
+				did_tmout = 1;
+
+			tpcnt += did_tmout;
 
 			rd_kafka_toppar_unlock(rktp);
 			rd_kafka_toppar_destroy(s_rktp);

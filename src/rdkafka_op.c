@@ -55,6 +55,7 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 "REPLY:FETCH_START",
                 "REPLY:FETCH_STOP",
                 "REPLY:SEEK",
+		"REPLY:PAUSE",
                 "REPLY:OFFSET_FETCH",
                 "REPLY:PARTITION_JOIN",
                 "REPLY:PARTITION_LEAVE",
@@ -76,6 +77,71 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
         return names[type & ~RD_KAFKA_OP_FLAGMASK]+skiplen;
 }
 
+
+void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
+	fprintf(fp,
+		"%s((rd_kafka_op_t*)%p)\n"
+		"%s Type: %s (0x%x), Version: %"PRId32"\n",
+		prefix, rko,
+		prefix, rd_kafka_op2str(rko->rko_type), rko->rko_type,
+		rko->rko_version);
+	if (rko->rko_err)
+		fprintf(fp, "%s Error: %s\n",
+			prefix, rd_kafka_err2str(rko->rko_err));
+	if (rko->rko_replyq.q)
+		fprintf(fp, "%s Replyq %p v%d (%s)\n",
+			prefix, rko->rko_replyq.q, rko->rko_replyq.version,
+#if ENABLE_DEVEL
+			rko->rko_replyq._id
+#else
+			""
+#endif
+			);
+	if (rko->rko_rktp) {
+		rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+		fprintf(fp, "%s ((rd_kafka_toppar_t*)%p) "
+			"%s [%"PRId32"] v%d (shptr %p)\n",
+			prefix, rktp, rktp->rktp_rkt->rkt_topic->str,
+			rktp->rktp_partition,
+			rd_atomic32_get(&rktp->rktp_version), rko->rko_rktp);
+	}
+
+	switch (rko->rko_type & ~RD_KAFKA_OP_FLAGMASK)
+	{
+	case RD_KAFKA_OP_FETCH:
+		fprintf(fp,  "%s Offset: %"PRId64"\n",
+			prefix, rko->rko_u.fetch.rkm.rkm_offset);
+		break;
+	case RD_KAFKA_OP_CONSUMER_ERR:
+		fprintf(fp,  "%s Offset: %"PRId64"\n",
+			prefix, rko->rko_u.err.offset);
+		/* FALLTHRU */
+	case RD_KAFKA_OP_ERR:
+		fprintf(fp, "%s Reason: %s\n", prefix, rko->rko_u.err.errstr);
+		break;
+	case RD_KAFKA_OP_DR:
+		fprintf(fp, "%s %"PRId32" messages on %s\n", prefix,
+			rd_atomic32_get(&rko->rko_u.dr.msgq.rkmq_msg_cnt),
+			rko->rko_u.dr.rkt ?
+			rd_kafka_topic_a2i(rko->rko_u.dr.rkt)->
+			rkt_topic->str : "(n/a)");
+		break;
+	case RD_KAFKA_OP_OFFSET_COMMIT:
+		fprintf(fp, "%s Callback: %p (opaque %p)\n",
+			prefix, rko->rko_u.offset_commit.cb,
+			rko->rko_u.offset_commit.opaque);
+		fprintf(fp, "%s %d partitions\n",
+			prefix,
+			rko->rko_u.offset_commit.partitions ?
+			rko->rko_u.offset_commit.partitions->cnt : 0);
+		break;
+
+	default:
+		break;
+	}
+}
+
+
 rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 	rd_kafka_op_t *rko;
 	static const size_t op2size[RD_KAFKA_OP__END] = {
@@ -93,6 +159,7 @@ rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 		[RD_KAFKA_OP_FETCH_START] = sizeof(rko->rko_u.fetch_start),
 		[RD_KAFKA_OP_FETCH_STOP] = 0,
 		[RD_KAFKA_OP_SEEK] = sizeof(rko->rko_u.fetch_start),
+		[RD_KAFKA_OP_PAUSE] = sizeof(rko->rko_u.pause),
 		[RD_KAFKA_OP_OFFSET_FETCH] = sizeof(rko->rko_u.offset_fetch),
 		[RD_KAFKA_OP_PARTITION_JOIN] = 0,
 		[RD_KAFKA_OP_PARTITION_LEAVE] = 0,
@@ -104,8 +171,8 @@ rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 		[RD_KAFKA_OP_GET_SUBSCRIPTION] = sizeof(rko->rko_u.subscribe),
 		[RD_KAFKA_OP_GET_ASSIGNMENT] = sizeof(rko->rko_u.assign),
 		[RD_KAFKA_OP_THROTTLE] = sizeof(rko->rko_u.throttle),
-		[RD_KAFKA_OP_OFFSET_RESET] = sizeof(rko->rko_u.offset_reset),
 		[RD_KAFKA_OP_NAME] = sizeof(rko->rko_u.name),
+		[RD_KAFKA_OP_OFFSET_RESET] = sizeof(rko->rko_u.offset_reset),
 	};
 	size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -119,7 +186,7 @@ rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 
 void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 
-	switch (rko->rko_type & ~RD_KAFKA_OP_REPLY)
+	switch (rko->rko_type & ~RD_KAFKA_OP_FLAGMASK)
 	{
 	case RD_KAFKA_OP_FETCH:
 		rd_kafka_msg_destroy(NULL, &rko->rko_u.fetch.rkm);
@@ -215,8 +282,7 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 
 	RD_IF_FREE(rko->rko_rktp, rd_kafka_toppar_destroy);
 
-        if (rko->rko_replyq)
-                rd_kafka_q_destroy(rko->rko_replyq);
+	rd_kafka_replyq_destroy(&rko->rko_replyq);
 
         if (rd_atomic32_sub(&rd_kafka_op_cnt, 1) < 0)
                 rd_kafka_assert(NULL, !*"rd_kafka_op_cnt < 0");
@@ -277,9 +343,12 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
         rko = rd_kafka_op_new(rko_orig->rko_type |
 			      (rko_orig->rko_op_cb ?
 			       RD_KAFKA_OP_CB : RD_KAFKA_OP_REPLY));
+	rd_kafka_op_get_reply_version(rko, rko_orig);
 	rko->rko_op_cb   = rko_orig->rko_op_cb;
-        rko->rko_version = rko_orig->rko_version;
 	rko->rko_err     = err;
+	if (rko_orig->rko_rktp)
+		rko->rko_rktp = rd_kafka_toppar_keep(
+			rd_kafka_toppar_s2i(rko_orig->rko_rktp));
 
         return rko;
 }
@@ -293,19 +362,16 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
  * @returns 1 if op was enqueued, else 0 and rko is destroyed.
  */
 int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
-	rd_kafka_q_t *replyq = rko->rko_replyq;
 
-        if (!replyq) {
+        if (!rko->rko_replyq.q) {
 		rd_kafka_op_destroy(rko);
                 return 0;
 	}
 
-	rko->rko_replyq = NULL;
-	rko->rko_type  |= rko->rko_type |
-		(rko->rko_op_cb ? RD_KAFKA_OP_CB : RD_KAFKA_OP_REPLY);
-        rko->rko_err    = err;
+	rko->rko_type |= (rko->rko_op_cb ? RD_KAFKA_OP_CB : RD_KAFKA_OP_REPLY);
+        rko->rko_err   = err;
 
-        return rd_kafka_q_enq(replyq, rko);
+	return rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
 }
 
 
@@ -319,9 +385,7 @@ rd_kafka_op_t *rd_kafka_op_req0 (rd_kafka_q_t *destq,
         rd_kafka_op_t *reply;
 
         /* Indicate to destination where to send reply. */
-        rko->rko_replyq = recvq;
-        if (recvq)
-                rd_kafka_q_keep(rko->rko_replyq);
+	rd_kafka_op_set_replyq(rko, recvq, NULL);
 
         /* Enqueue op */
         rd_kafka_q_enq(destq, rko);
@@ -418,10 +482,12 @@ void rd_kafka_op_throttle_time (rd_kafka_broker_t *rkb,
  * @returns 1 if handled, else 0.
  */
 int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko) {
-	if (rko->rko_type & RD_KAFKA_OP_CB) {
+	if (rko->rko_type & RD_KAFKA_OP_CB)
 		rko->rko_op_cb(rk, rko);
-		return 1;
-	}
+	else if (rko->rko_type == RD_KAFKA_OP_RECV_BUF) /* Handle Response */
+		rd_kafka_buf_handle_op(rko, rko->rko_err);
+	else
+		return 0;
 
-	return 0;
+	return 1;
 }

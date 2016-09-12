@@ -210,7 +210,8 @@ rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
                 int i;
 
                 /* Ignore topics in blacklist */
-                if (rd_kafka_pattern_match(&rkcg->rkcg_rk->rk_conf.
+                if (rkcg->rkcg_rk->rk_conf.topic_blacklist &&
+		    rd_kafka_pattern_match(rkcg->rkcg_rk->rk_conf.
                                            topic_blacklist,
                                            metadata->topics[ti].topic)) {
                         rd_kafka_dbg(rkcg->rkcg_rk, TOPIC, "BLACKLIST",
@@ -516,8 +517,12 @@ int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 				rk, &rkas, "consumer", "roundrobin",
 				rd_kafka_roundrobin_assignor_assign_cb,
 				NULL);
-		else /* Input already validatd by .._conf.c */
-			RD_NOTREACHED();
+		else {
+			rd_snprintf(errstr, errstr_size,
+				    "Unsupported partition.assignment.strategy:"
+				    " %s", s);
+			return -1;
+		}
 
 		if (rkas) {
 			if (!rkas->rkas_enabled) {

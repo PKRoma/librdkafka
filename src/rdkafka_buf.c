@@ -35,6 +35,8 @@ void rd_kafka_buf_destroy_final (rd_kafka_buf_t *rkbuf) {
         if (rkbuf->rkbuf_response)
                 rd_kafka_buf_destroy(rkbuf->rkbuf_response);
 
+	rd_kafka_replyq_destroy(&rkbuf->rkbuf_replyq);
+
         if (rkbuf->rkbuf_buf2)
                 rd_free(rkbuf->rkbuf_buf2);
 
@@ -85,6 +87,7 @@ void rd_kafka_buf_rewind (rd_kafka_buf_t *rkbuf, int iovindex, size_t new_of,
 	rkbuf->rkbuf_msg.msg_iovlen = iovindex;
 	rkbuf->rkbuf_wof = new_of;
 	rkbuf->rkbuf_wof_init = new_of_init;
+	rkbuf->rkbuf_len = new_of;
 
 }
 
@@ -107,6 +110,8 @@ void rd_kafka_buf_push0 (rd_kafka_buf_t *rkbuf, const void *buf, size_t len,
 
 	iov->iov_base = (void *)buf;
 	iov->iov_len = len;
+
+	rkbuf->rkbuf_len += len;
 
 	if (allow_crc_calc && (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_CRC))
 		rkbuf->rkbuf_crc = rd_crc32_update(rkbuf->rkbuf_crc, buf, len);
@@ -204,7 +209,6 @@ rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk,
         rkbuf->rkbuf_flags = flags;
 	rkbuf->rkbuf_iov = (struct iovec *)(rkbuf+1);
 	rkbuf->rkbuf_iovcnt = iovcnt;
-	rd_kafka_assert(NULL, rkbuf->rkbuf_iovcnt <= IOV_MAX);
 	rkbuf->rkbuf_msg.msg_iov = rkbuf->rkbuf_iov;
 
         if (growable)
@@ -216,9 +220,7 @@ rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk,
 
         if (rk) {
                 /* save the first iovecs for the header + clientid */
-                rkbuf->rkbuf_iov[0].iov_base = rkbuf->rkbuf_buf;
-                rkbuf->rkbuf_iov[0].iov_len  = headersize;
-                rkbuf->rkbuf_msg.msg_iovlen = 1;
+		rd_kafka_buf_push0(rkbuf, rkbuf->rkbuf_buf, headersize, 0);
         }
 
 	rkbuf->rkbuf_size     = size;
@@ -448,9 +450,13 @@ void rd_kafka_buf_handle_op (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
         request = rko->rko_u.xbuf.rkbuf;
         rko->rko_u.xbuf.rkbuf = NULL;
 
-	if (request->rkbuf_replyq) { /* NULL on op_destroy() */
-		rd_kafka_q_destroy(request->rkbuf_replyq);
-		request->rkbuf_replyq = NULL;
+	/* NULL on op_destroy() */
+	if (request->rkbuf_replyq.q) {
+		int32_t version = request->rkbuf_replyq.version;
+		rd_kafka_replyq_destroy(&request->rkbuf_replyq);
+		/* Callback might need to version check so we retain the
+		 * version across the destroy call which clears it. */
+		request->rkbuf_replyq.version = version;
 	}
 
 	if (!request->rkbuf_cb) {
@@ -495,21 +501,21 @@ void rd_kafka_buf_callback (rd_kafka_t *rk,
                 return;
 	}
 
-        if (err != RD_KAFKA_RESP_ERR__DESTROY && request->rkbuf_replyq) {
+        if (err != RD_KAFKA_RESP_ERR__DESTROY && request->rkbuf_replyq.q) {
                 rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);
 
 		rd_kafka_assert(NULL, !request->rkbuf_response);
 		request->rkbuf_response = response;
 
                 /* Increment refcnt since rko_rkbuf will be decref:ed
-                 * if q_enq() fails and we dont want the rkbuf gone in that
+                 * if replyq_enq() fails and we dont want the rkbuf gone in that
                  * case. */
                 rd_kafka_buf_keep(request);
                 rko->rko_u.xbuf.rkbuf = request;
 
                 rko->rko_err = err;
 
-	        rd_kafka_q_enq(request->rkbuf_replyq, rko);
+	        rd_kafka_replyq_enq(&request->rkbuf_replyq, rko, 0);
 
 		rd_kafka_buf_destroy(request); /* from keep above */
 		return;

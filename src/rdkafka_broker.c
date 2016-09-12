@@ -123,7 +123,7 @@ void msghdr_print (rd_kafka_t *rk,
 #define rd_kafka_broker_terminating(rkb) \
         (rd_refcnt_get(&(rkb)->rkb_refcnt) <= 1)
 
-static size_t rd_kafka_msghdr_size (const struct msghdr *msg) {
+static RD_UNUSED size_t rd_kafka_msghdr_size (const struct msghdr *msg) {
 	int i;
 	size_t tot = 0;
 
@@ -480,29 +480,37 @@ static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
  * Locality: Broker thread
  */
 static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
-	int req_cnt, q_cnt;
+	int req_cnt, retry_cnt, q_cnt;
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
 	/* Outstanding requests waiting for response */
 	req_cnt = rd_kafka_broker_bufq_timeout_scan(
 		rkb, 1, &rkb->rkb_waitresps, RD_KAFKA_RESP_ERR__TIMED_OUT, now);
+	/* Requests in retry queue */
+	retry_cnt = rd_kafka_broker_bufq_timeout_scan(
+		rkb, 0, &rkb->rkb_retrybufs, RD_KAFKA_RESP_ERR__TIMED_OUT, now);
 	/* Requests in local queue not sent yet. */
 	q_cnt = rd_kafka_broker_bufq_timeout_scan(
 		rkb, 0, &rkb->rkb_outbufs, RD_KAFKA_RESP_ERR__TIMED_OUT, now);
 
-	if (req_cnt + q_cnt > 0) {
-		rd_rkb_dbg(rkb, MSG, "REQTMOUT", "Timed out %i+%i requests",
-			   req_cnt, q_cnt);
+	if (req_cnt + retry_cnt + q_cnt > 0) {
+		rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_BROKER,
+			   "REQTMOUT", "Timed out %i+%i+%i requests",
+			   req_cnt, retry_cnt, q_cnt);
 
                 /* Fail the broker if socket.max.fails is configured and
                  * now exceeded. */
                 rkb->rkb_req_timeouts   += req_cnt;
                 rd_atomic64_add(&rkb->rkb_c.req_timeouts, req_cnt + q_cnt);
 
-                if (rkb->rkb_rk->rk_conf.socket_max_fails &&
-                    rkb->rkb_req_timeouts >=
-                    rkb->rkb_rk->rk_conf.socket_max_fails &&
+		/* If this was an in-flight request that timed out, or
+		 * the other queues has reached the socket.max.fails threshold,
+		 * we need to take down the connection. */
+                if ((req_cnt > 0 ||
+		     (rkb->rkb_rk->rk_conf.socket_max_fails &&
+		      rkb->rkb_req_timeouts >=
+		      rkb->rkb_rk->rk_conf.socket_max_fails)) &&
                     rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP) {
                         errno = ETIMEDOUT;
                         rd_kafka_broker_fail(rkb, LOG_ERR,
@@ -641,8 +649,11 @@ static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf,
 
 	/* Calculate total message buffer length. */
 	rkbuf->rkbuf_of          = 0;  /* Indicates send position */
-	rkbuf->rkbuf_len         = rd_kafka_msghdr_size(&rkbuf->rkbuf_msg);
 
+	rd_dassert(rkbuf->rkbuf_len == rd_kafka_msghdr_size(&rkbuf->rkbuf_msg));
+
+	rd_kafka_assert(NULL,
+			rkbuf->rkbuf_len-4 < (size_t)rk->rk_conf.max_msg_size);
 	rd_kafka_buf_update_i32(rkbuf, of_Size, (int32_t) rkbuf->rkbuf_len-4);
 }
 
@@ -699,7 +710,7 @@ static int rd_kafka_broker_buf_enq2 (rd_kafka_broker_t *rkb,
 void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
                                      int16_t ApiKey,
                                      rd_kafka_buf_t *rkbuf,
-                                     rd_kafka_q_t *replyq,
+                                     rd_kafka_replyq_t replyq,
                                      rd_kafka_resp_cb_t *resp_cb,
                                      void *opaque) {
 
@@ -708,10 +719,11 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
         rd_kafka_broker_keep(rkb);
         if (resp_cb) {
                 rkbuf->rkbuf_replyq = replyq;
-                rd_kafka_q_keep(replyq);
                 rkbuf->rkbuf_cb     = resp_cb;
                 rkbuf->rkbuf_opaque = opaque;
-        }
+        } else {
+		rd_dassert(!replyq.q);
+	}
 
         rd_kafka_buf_finalize(rkb->rkb_rk, rkbuf, ApiKey);
 
@@ -722,7 +734,7 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
 	} else {
 		rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_XMIT_BUF);
 		rko->rko_u.xbuf.rkbuf = rkbuf;
-		rd_kafka_q_enq(&rkb->rkb_ops, rko);
+		rd_kafka_q_enq(rkb->rkb_ops, rko);
 	}
 }
 
@@ -752,7 +764,7 @@ static void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
 	 * op for the broker's thread instead since all transmissions must
 	 * be performed by the broker thread. */
 	if (!thrd_is_current(rkb->rkb_thread)) {
-                rd_kafka_q_enq(&rkb->rkb_ops, rko);
+                rd_kafka_q_enq(rkb->rkb_ops, rko);
 		return;
 	}
 
@@ -781,7 +793,10 @@ static void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
                                           rko->rko_u.metadata.reason);
 
 	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Metadata, rkbuf,
-				       &rkb->rkb_rk->rk_ops,
+				       /* Handle response thru rk_ops,
+					* but forward parsed result to
+					* rko's replyq when done. */
+				       RD_KAFKA_REPLYQ(rkb->rkb_rk->rk_ops, 0),
 				       rd_kafka_op_handle_Metadata, rko);
 }
 
@@ -799,7 +814,7 @@ static void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
 void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
                                    int all_topics,
                                    rd_kafka_itopic_t *only_rkt,
-                                   rd_kafka_q_t *replyq,
+                                   rd_kafka_replyq_t replyq,
                                    const char *reason) {
         rd_kafka_op_t *rko;
 
@@ -808,10 +823,7 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
         if (only_rkt)
                 rko->rko_u.metadata.rkt = rd_kafka_topic_keep_a(only_rkt);
 
-        if (replyq) {
-                rko->rko_replyq = replyq;
-                rd_kafka_q_keep(replyq);
-        }
+	rko->rko_replyq = replyq;
 
 	strncpy(rko->rko_u.metadata.reason, reason,
 		sizeof(rko->rko_u.metadata.reason)-1);
@@ -821,9 +833,26 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 
 
 
+/**
+ * @returns the current broker state change version.
+ *          Pass this value to fugure rd_kafka_brokers_wait_state_change() calls
+ *          to avoid the race condition where a state-change happens between
+ *          an initial call to some API that fails and the sub-sequent
+ *          .._wait_state_change() call.
+ */
+int rd_kafka_brokers_get_state_version (rd_kafka_t *rk) {
+	int version;
+	mtx_lock(&rk->rk_broker_state_change_lock);
+	version = rk->rk_broker_state_change_version;
+	mtx_unlock(&rk->rk_broker_state_change_lock);
+	return version;
+}
 
 /**
  * @brief Wait at most \p timeout_ms for any state change for any broker.
+ *        \p stored_version is the value previously returned by
+ *        rd_kafka_brokers_get_state_version() prior to another API call
+ *        that failed due to invalid state.
  *
  * Triggers:
  *   - broker state changes
@@ -837,12 +866,16 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
  *
  * @locality any thread
  */
-int rd_kafka_brokers_wait_state_change (rd_kafka_t *rk, int timeout_ms) {
+int rd_kafka_brokers_wait_state_change (rd_kafka_t *rk, int stored_version,
+					int timeout_ms) {
 	int r;
 	mtx_lock(&rk->rk_broker_state_change_lock);
-	r = cnd_timedwait_ms(&rk->rk_broker_state_change_cnd,
-			     &rk->rk_broker_state_change_lock,
-			     timeout_ms) == thrd_success;
+	if (stored_version != rk->rk_broker_state_change_version)
+		r = 1;
+	else
+		r = cnd_timedwait_ms(&rk->rk_broker_state_change_cnd,
+				     &rk->rk_broker_state_change_lock,
+				     timeout_ms) == thrd_success;
 	mtx_unlock(&rk->rk_broker_state_change_lock);
 	return r;
 }
@@ -857,6 +890,7 @@ void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk) {
 	rd_kafka_dbg(rk, GENERIC, "BROADCAST",
 		     "Broadcasting state change");
 	mtx_lock(&rk->rk_broker_state_change_lock);
+	rk->rk_broker_state_change_version++;
 	cnd_broadcast(&rk->rk_broker_state_change_cnd);
 	mtx_unlock(&rk->rk_broker_state_change_lock);
 }
@@ -919,6 +953,7 @@ rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms) {
 	while (1) {
 		rd_kafka_broker_t *rkb;
 		int remains;
+		int version = rd_kafka_brokers_get_state_version(rk);
 
 		rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
 					  rd_kafka_broker_filter_non_blocking,
@@ -931,7 +966,7 @@ rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms) {
 		if (rd_timeout_expired(remains))
 			return NULL;
 
-		rd_kafka_brokers_wait_state_change(rk, remains);
+		rd_kafka_brokers_wait_state_change(rk, version, remains);
 	}
 
 	return NULL;
@@ -1010,7 +1045,8 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
                 rd_kafka_topic_wrunlock(rkt);
         }
 
-	rd_kafka_broker_metadata_req(rkb, 0, rkt, NULL, "leader query");
+	rd_kafka_broker_metadata_req(rkb, 0, rkt, RD_KAFKA_NO_REPLYQ,
+				     "leader query");
 
 	/* Release refcnt from rd_kafka_broker_any() */
 	rd_kafka_broker_destroy(rkb);
@@ -1091,31 +1127,32 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
  * Rebuilds 'src' into 'dst' starting at byte offset 'of'.
  */
 static void rd_kafka_msghdr_rebuild (struct msghdr *dst, size_t dst_len,
-				     struct msghdr *src,
-				     ssize_t of) {
-	int i;
-	size_t len = 0;
-	void *iov = dst->msg_iov;
+				     size_t max_bytes,
+				     struct msghdr *src, ssize_t of) {
+	struct iovec *siov = src->msg_iov, *s_end = &src->msg_iov[src->msg_iovlen];
+	struct iovec *diov = dst->msg_iov, *d_end = &dst->msg_iov[dst_len];
+
 	*dst = *src;
-	dst->msg_iov = iov;
+	dst->msg_iov = diov;
 	dst->msg_iovlen = 0;
 
-	for (i = 0 ; i < (int)src->msg_iovlen ; i++) {
-		ssize_t vof = of - len;
+	for ( ; max_bytes > 0 && siov < s_end && diov < d_end ; siov++) {
+		ssize_t rlen;
 
-		if (vof < 0)
-			vof = 0;
-
-		if ((size_t)vof < (size_t)src->msg_iov[i].iov_len) {
-			rd_kafka_assert(NULL, (size_t)dst->msg_iovlen < dst_len);
-			dst->msg_iov[dst->msg_iovlen].iov_base =
-				(char *)src->msg_iov[i].iov_base + vof;
-			dst->msg_iov[dst->msg_iovlen].iov_len =
-				src->msg_iov[i].iov_len - vof;
-			dst->msg_iovlen++;
+		if (of >= (ssize_t)siov->iov_len) {
+			of -= siov->iov_len;
+			continue;
 		}
 
-		len += src->msg_iov[i].iov_len;
+		rlen = RD_MIN(siov->iov_len - of, max_bytes);
+
+		diov->iov_base = ((char *)(siov->iov_base)) + of;
+		diov->iov_len  = rlen;
+		rd_dassert(rlen > 0);
+		max_bytes     -= rlen;
+		of             = 0;
+		dst->msg_iovlen++;
+		diov++;
 	}
 }
 
@@ -1175,6 +1212,7 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 
 		rkbuf->rkbuf_msg.msg_iov = rkbuf->rkbuf_iov;
 		rkbuf->rkbuf_msg.msg_iovlen = 1;
+		rkbuf->rkbuf_len = 0; /* read bytes is zero */
 
 		msg = rkbuf->rkbuf_msg;
 
@@ -1187,11 +1225,12 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 		/* Receive in progress: adjust the msg to allow more data. */
 		msg.msg_iov = &iov;
 		rd_kafka_msghdr_rebuild(&msg, rkbuf->rkbuf_msg.msg_iovlen,
+					rkb->rkb_rk->rk_conf.recv_max_msg_size,
 					&rkbuf->rkbuf_msg,
 					rkbuf->rkbuf_wof);
 	}
 
-	rd_kafka_assert(rkb->rkb_rk, rd_kafka_msghdr_size(&msg) > 0);
+	rd_dassert(rd_kafka_msghdr_size(&msg) > 0);
 
 	r = rd_kafka_transport_recvmsg(rkb->rkb_transport, &msg,
 				       errstr, sizeof(errstr));
@@ -1363,7 +1402,7 @@ void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb) {
 				     rkb->rkb_rk->rk_conf.
 				     metadata_refresh_sparse ?
 				     0 /* known topics */ : 1 /* all topics */,
-                                     NULL, NULL, "connected");
+                                     NULL, RD_KAFKA_NO_REPLYQ, "connected");
 }
 
 
@@ -1470,7 +1509,8 @@ static void rd_kafka_broker_connect_auth (rd_kafka_broker_t *rkb) {
 
 			rd_kafka_SaslHandshakeRequest(
 				rkb, rkb->rkb_rk->rk_conf.sasl.mechanisms,
-				NULL, rd_kafka_broker_handle_SaslHandshake,
+				RD_KAFKA_NO_REPLYQ,
+				rd_kafka_broker_handle_SaslHandshake,
 				NULL, 1 /* flash */);
 
 		} else {
@@ -1613,8 +1653,9 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 	}
 
 	/* Connect succeeded */
-
-	rd_rkb_dbg(rkb, BROKER, "CONNECTED", "Connected");
+	rkb->rkb_connid++;
+	rd_rkb_dbg(rkb, BROKER, "CONNECTED", "Connected (#%d)",
+		   rkb->rkb_connid);
 	rkb->rkb_err.err = 0;
 	rkb->rkb_max_inflight = 1; /* Hold back other requests until
 				    * ApiVersion, SaslHandshake, etc
@@ -1639,7 +1680,8 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 		rd_kafka_broker_unlock(rkb);
 
 		rd_kafka_ApiVersionRequest(
-			rkb, NULL, rd_kafka_broker_handle_ApiVersion, NULL,
+			rkb, RD_KAFKA_NO_REPLYQ,
+			rd_kafka_broker_handle_ApiVersion, NULL,
 			1 /*Flash message: prepend to transmit queue*/);
 	} else {
 
@@ -1669,8 +1711,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 	       rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
 	       (rkbuf = TAILQ_FIRST(&rkb->rkb_outbufs.rkbq_bufs))) {
 		ssize_t r;
-		struct msghdr *msg = &rkbuf->rkbuf_msg;
-		struct msghdr msg2;
+		struct msghdr *msg;
 		struct iovec iov[IOV_MAX];
 		size_t of = rkbuf->rkbuf_of;
 
@@ -1682,32 +1723,49 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		 * but need to use corrid to check this. SSL_write() expects
 		 * us to send the same buffer again when 0 is returned.
 		 */
-		if (rkbuf->rkbuf_corrid == 0) {
+		if (rkbuf->rkbuf_corrid == 0 ||
+		    rkbuf->rkbuf_connid != rkb->rkb_connid) {
 			rd_kafka_assert(NULL, rkbuf->rkbuf_of == 0);
 			rkbuf->rkbuf_corrid = ++rkb->rkb_corrid;
 			rd_kafka_buf_update_i32(rkbuf, 4+2+2,
 						rkbuf->rkbuf_corrid);
+			rkbuf->rkbuf_connid = rkb->rkb_connid;
 		} else if (rkbuf->rkbuf_of > 0) {
-			/* If message has been partially sent we need
-			 * to construct a new msg+iovec skipping the
-			 * sent bytes. */
+			rd_kafka_assert(NULL,
+					rkbuf->rkbuf_connid == rkb->rkb_connid);
+                }
+
+		if (rkbuf->rkbuf_of > 0 ||
+		    rkbuf->rkbuf_iovcnt > IOV_MAX) {
+			struct msghdr msg2;
+
+			/* If message has been partially sent or contains
+			 * too many iovecs for sendmsg() we need to construct
+			 * a new msg+iovec skipping the sent bytes or
+			 * excessive iovecs. */
+
 			msg2.msg_iov = iov;
 			rd_kafka_msghdr_rebuild(&msg2, IOV_MAX,
+						rkb->rkb_rk->rk_conf.
+						max_msg_size,
 						&rkbuf->rkbuf_msg,
 						rkbuf->rkbuf_of);
 			msg = &msg2;
-                }
+		} else
+			msg = &rkbuf->rkbuf_msg;
+
 
 		if (0) {
 			rd_rkb_dbg(rkb, PROTOCOL, "SEND",
 				   "Send %s corrid %"PRId32" at "
-				   "offset %"PRIdsz"/%"PRIdsz"",
+				   "offset %"PRIdsz"/%"PRIdsz,
 				   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.
 						       ApiKey),
 				   rkbuf->rkbuf_corrid,
 				   rkbuf->rkbuf_of, rkbuf->rkbuf_len);
 			msghdr_print(rkb->rkb_rk, "SEND", msg, 1);
 		}
+
 		if ((r = rd_kafka_broker_send(rkb, msg)) == -1) {
 			/* FIXME: */
 			return -1;
@@ -1771,7 +1829,7 @@ void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
         if (!thrd_is_current(rkb->rkb_thread)) {
                 rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_XMIT_RETRY);
                 rko->rko_u.xbuf.rkbuf = rkbuf;
-                rd_kafka_q_enq(&rkb->rkb_ops, rko);
+                rd_kafka_q_enq(rkb->rkb_ops, rko);
                 return;
         }
 
@@ -1835,7 +1893,7 @@ void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
 		/* Move all messages to op's msgq */
 		rd_kafka_msgq_move(&rko->rko_u.dr.msgq, rkmq);
 
-		rd_kafka_q_enq(&rk->rk_rep, rko);
+		rd_kafka_q_enq(rk->rk_rep, rko);
 
 	} else {
 		/* No delivery report callback, destroy the messages
@@ -1888,7 +1946,7 @@ rd_kafka_produce_reply_handle (rd_kafka_broker_t *rkb,
 		int32_t Throttle_Time;
 		rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
 
-		rd_kafka_op_throttle_time(rkb, &rkb->rkb_rk->rk_rep,
+		rd_kafka_op_throttle_time(rkb, rkb->rkb_rk->rk_rep,
 					  Throttle_Time);
 	}
 
@@ -1925,45 +1983,46 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_t *rk,
 
 
 	if (err) {
+		int actions;
+
+		actions = rd_kafka_err_action(
+			rkb, err, reply, request,
+
+			RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
+			RD_KAFKA_RESP_ERR__TRANSPORT,
+
+			RD_KAFKA_ERR_ACTION_REFRESH,
+			RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
+
+			RD_KAFKA_ERR_ACTION_END);
+
 		rd_rkb_dbg(rkb, MSG, "MSGSET", "MessageSet with %i message(s) "
-			   "encountered error: %s",
+			   "encountered error: %s (actions 0x%x)",
 			   rd_atomic32_get(&request->rkbuf_msgq.rkmq_msg_cnt),
-			   rd_kafka_err2str(err));
+			   rd_kafka_err2str(err), actions);
 
-                if (rd_kafka_buf_retry(rkb, request))
-                        return; /* Scheduled for retry */
-
-		switch (err)
-		{
-		case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
-		case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
-		case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
-		case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
-		case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
-		case RD_KAFKA_RESP_ERR__TRANSPORT:
+		if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
 			/* Request metadata information update */
 			rkb->rkb_metadata_fast_poll_cnt =
 				rkb->rkb_rk->rk_conf.metadata_refresh_fast_cnt;
 			rd_kafka_topic_leader_query(rkb->rkb_rk,
 						    rktp->rktp_rkt);
 
-			/* FIXME: Should message retries be incremented? */
-
 			/* Move messages (in the rkbuf) back to the partition's
 			 * queue head. They will be resent when a new leader
 			 * is delegated. */
 			rd_kafka_toppar_insert_msgq(rktp, &request->rkbuf_msgq);
-			goto done;
-
-		case RD_KAFKA_RESP_ERR__DESTROY:
-		case RD_KAFKA_RESP_ERR_INVALID_MSG:
-		case RD_KAFKA_RESP_ERR_INVALID_MSG_SIZE:
-		case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
-		default:
-			/* Fatal errors: no message transmission retries */
-			break;
 		}
 
+		if ((actions & RD_KAFKA_ERR_ACTION_RETRY) &&
+		    rd_kafka_buf_retry(rkb, request))
+                        return; /* Scheduled for retry */
+
+		if (actions & RD_KAFKA_ERR_ACTION_REFRESH)
+			goto done;
+
+
+		/* Fatal errors: no message transmission retries */
 		/* FALLTHRU */
 	}
 
@@ -2630,7 +2689,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	 *  msgcntmax * messagepayload (ext memory)
 	 * = 1 + (4 * msgcntmax)
 	 *
-	 * We are bound both by configuration and IOV_MAX
+	 * We are bound by configuration.
 	 */
 
 	if (rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt) > 0)
@@ -2640,11 +2699,6 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 			   rkb->rkb_rk->rk_conf.batch_num_messages);
 	rd_kafka_assert(rkb->rkb_rk, msgcntmax > 0);
 	iovcnt = 1 + (4 * msgcntmax);
-
-	if (iovcnt > RD_KAFKA_PAYLOAD_IOV_MAX) {
-		iovcnt = RD_KAFKA_PAYLOAD_IOV_MAX;
-		msgcntmax = ((iovcnt / 4) - 1);
-	}
 
 	/* Allocate iovecs to hold all headers and messages,
 	 * and allocate auxilliery space for the headers. */
@@ -2696,7 +2750,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	while (msgcnt < msgcntmax &&
 	       (rkm = TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs))) {
 
-		if (MessageSetSize + rkm->rkm_len >
+		if (of_firstmsg + MessageSetSize + rd_kafka_msg_wire_size(rkm) >
 		    (size_t)rkb->rkb_rk->rk_conf.max_msg_size) {
 			rd_rkb_dbg(rkb, MSG, "PRODUCE",
 				   "No more space in current message "
@@ -2727,6 +2781,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 		msgcnt++;
 		MessageSetSize += outlen;
+		rd_dassert(outlen <= rd_kafka_msg_wire_size(rkm));
 	}
 
 	/* No messages added, bail out early. */
@@ -2771,7 +2826,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		rd_kafka_buf_version_set(rkbuf, 1);
 
 	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Produce, rkbuf,
-                                       &rktp->rktp_ops,
+                                       RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
                                        rd_kafka_produce_msgset_reply,
                                        /* refcount for msgset_reply() */
                                        rd_kafka_toppar_keep(rktp));
@@ -2878,7 +2933,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
         case RD_KAFKA_OP_XMIT_BUF:
                 rd_kafka_broker_buf_enq2(rkb, rko->rko_u.xbuf.rkbuf);
                 rko->rko_u.xbuf.rkbuf = NULL; /* buffer now owned by broker */
-                if (rko->rko_replyq) {
+                if (rko->rko_replyq.q) {
                         /* Op will be reused for forwarding response. */
                         rko = NULL;
                 }
@@ -2926,7 +2981,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                         s_rktp = rd_kafka_toppar_keep(rktp);
 
                         /* No, forward this op to the new next leader. */
-                        rd_kafka_q_enq(&rktp->rktp_next_leader->rkb_ops, rko);
+                        rd_kafka_q_enq(rktp->rktp_next_leader->rkb_ops, rko);
                         rko = NULL;
 
                         rd_kafka_toppar_unlock(rktp);
@@ -3005,7 +3060,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 if (rktp->rktp_next_leader) {
                         /* There is a next leader we need to migrate to. */
                         rko->rko_type = RD_KAFKA_OP_PARTITION_JOIN;
-                        rd_kafka_q_enq(&rktp->rktp_next_leader->rkb_ops, rko);
+                        rd_kafka_q_enq(rktp->rktp_next_leader->rkb_ops, rko);
                         rko = NULL;
                 }
 
@@ -3040,7 +3095,7 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
 	rd_ts_t now;
 
 	/* Serve broker ops */
-        while ((rko = rd_kafka_q_pop(&rkb->rkb_ops, timeout_ms, 0)))
+        while ((rko = rd_kafka_q_pop(rkb->rkb_ops, timeout_ms, 0)))
                 rd_kafka_broker_op_serve(rkb, rko);
 
         now = rd_clock();
@@ -3050,7 +3105,8 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
                      !rkb->rkb_rk->rk_conf.metadata_refresh_sparse &&
                      now >= rkb->rkb_ts_metadata_poll))
 		rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
-		NULL, "periodic refresh");
+					     RD_KAFKA_NO_REPLYQ,
+					     "periodic refresh");
 
 	/* Serve IO events */
         if (likely(rkb->rkb_transport != NULL))
@@ -3364,6 +3420,7 @@ static rd_kafka_resp_err_t
 rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			    rd_kafka_toppar_t *rktp,
 			    rd_kafka_q_t *rkq,
+			    struct rd_kafka_toppar_ver *tver,
 			    int16_t ApiVersion,
 			    rd_kafka_buf_t *rkbuf_orig,
 			    void *buf, size_t size) {
@@ -3472,7 +3529,7 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 
 			rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH);
 			rko->rko_rktp = rd_kafka_toppar_keep(rktp);
-			rko->rko_version = rktp->rktp_fetch_version;
+			rko->rko_version = tver->version;
 			rkm = &rko->rko_u.fetch.rkm;
 
 			/* Since all the ops share the same payload buffer
@@ -3646,7 +3703,7 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			/* Create op and push on temporary queue. */
 			rd_kafka_q_op_err(rkq, RD_KAFKA_OP_CONSUMER_ERR,
 					  RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,
-					  rktp->rktp_fetch_version, rktp,
+					  tver->version, rktp,
 					  hdr.Offset,
 					  "Unsupported compression codec "
 					  "0x%hx", hdr.Attributes);
@@ -3670,7 +3727,7 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			/* Now parse the contained Messages */
 			rd_kafka_messageset_handle(rkb, rktp,
 						   relative_offsets ?
-						   &relq : rkq,
+						   &relq : rkq, tver,
 						   ApiVersion,
 						   rkbufz, outbuf, outlen);
 
@@ -3735,7 +3792,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 		int32_t Throttle_Time;
 		rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
 
-		rd_kafka_op_throttle_time(rkb, &rkb->rkb_rk->rk_rep,
+		rd_kafka_op_throttle_time(rkb, rkb->rkb_rk->rk_rep,
 					  Throttle_Time);
 	}
 
@@ -3750,6 +3807,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 		rd_kafkap_str_t topic;
 		rd_kafka_toppar_t *rktp;
 		shptr_rd_kafka_toppar_t *s_rktp = NULL;
+		int32_t fetch_version;
 		int32_t PartitionArrayCnt;
 		struct {
 			int32_t Partition;
@@ -3826,6 +3884,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
                                 continue;
                         }
+			fetch_version = rktp->rktp_fetch_version;
                         rd_kafka_toppar_unlock(rktp);
 
 			/* Check if this Fetch is for an outdated fetch version,
@@ -3837,15 +3896,14 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 			rd_kafka_assert(NULL, tver &&
 					rd_kafka_toppar_s2i(tver->s_rktp) ==
 					rktp);
-			if (tver->version < rktp->rktp_fetch_version) {
+			if (tver->version < fetch_version) {
 				rd_rkb_dbg(rkb, MSG, "DROP",
 					   "%s [%"PRId32"]: "
 					   "dropping outdated fetch response "
 					   "(v%d < %d)",
 					   rktp->rktp_rkt->rkt_topic->str,
 					   rktp->rktp_partition,
-					   tver->version,
-					   rktp->rktp_fetch_version);
+					   tver->version, fetch_version);
                                 rd_atomic64_add(&rktp->rktp_c. rx_ver_drops, 1);
                                 rd_kafka_toppar_destroy(s_rktp); /* from get */
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
@@ -3861,8 +3919,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				   hdr.MessageSetSize,
 				   rd_kafka_err2str(hdr.ErrorCode),
 				   hdr.HighwaterMarkOffset,
-                                   tver->version,
-                                   rktp->rktp_fetch_version);
+                                   tver->version, fetch_version);
 
 
                         /* Update hi offset to be able to compute
@@ -3925,8 +3982,9 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					/* FALLTHRU */
 				case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
 				default: /* and all other errors */
+					rd_dassert(tver->version > 0);
 					rd_kafka_q_op_err(
-						&rktp->rktp_fetchq,
+						rktp->rktp_fetchq,
 						RD_KAFKA_OP_CONSUMER_ERR,
 						hdr.ErrorCode, tver->version,
 						rktp,
@@ -3961,7 +4019,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 
 			/* Parse and handle the message set */
 			err2 = rd_kafka_messageset_handle(
-				rkb, rktp, &tmp_opq,
+				rkb, rktp, &tmp_opq, tver,
 				request->rkbuf_reqhdr.ApiVersion,
 				rkbuf, rkbuf->rkbuf_rbuf+rkbuf->rkbuf_of,
 				hdr.MessageSetSize);
@@ -3979,7 +4037,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				   rd_kafka_q_len(&tmp_opq),
 				   rktp->rktp_rkt->rkt_topic->str,
 				   rktp->rktp_partition,
-				   rd_kafka_q_len(&rktp->rktp_fetchq),
+				   rd_kafka_q_len(rktp->rktp_fetchq),
 				   tver->version);
 
 			if (rd_kafka_q_len(&tmp_opq) > 0) {
@@ -3994,7 +4052,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				if (rko)
 					last_offset = rko->rko_u.fetch.rkm.rkm_offset;
 
-				if (rd_kafka_q_concat(&rktp->rktp_fetchq,
+				if (rd_kafka_q_concat(rktp->rktp_fetchq,
 						      &tmp_opq) == -1) {
 					/* rktp fetchq disabled, probably
 					 * shutting down. Drop messages. */
@@ -4021,7 +4079,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 						   rktp->rktp_fetch_msg_max_bytes);
 				} else {
 					rd_kafka_q_op_err(
-						&rktp->rktp_fetchq,
+						rktp->rktp_fetchq,
 						RD_KAFKA_OP_CONSUMER_ERR,
 						RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE,
 						tver->version,
@@ -4377,11 +4435,11 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                                (int)(rkb->rkb_rk->rk_conf.
 						     reconnect_jitter_ms*1.5))
                                      * 1000))) < 0) {
+				backoff = RD_MAX(-backoff / 1000, 100);
                                 rd_rkb_dbg(rkb, BROKER, "RECONNECT",
                                            "Delaying next reconnect by %dms",
-                                           -(int)(backoff/1000));
-                                rd_kafka_broker_ua_idle(rkb,
-							(int)(-backoff / 1000));
+                                           (int)backoff);
+                                rd_kafka_broker_ua_idle(rkb, (int)backoff);
                                 rkb->rkb_ts_connect = 0;
                                 continue;
                         }
@@ -4506,8 +4564,8 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
 		rd_free(rkb->rkb_ApiVersions);
         rd_free(rkb->rkb_origname);
 
-	rd_kafka_q_purge(&rkb->rkb_ops);
-	rd_kafka_q_destroy(&rkb->rkb_ops);
+	rd_kafka_q_purge(rkb->rkb_ops);
+	rd_kafka_q_destroy(rkb->rkb_ops);
 
         rd_avg_destroy(&rkb->rkb_avg_rtt);
 	rd_avg_destroy(&rkb->rkb_avg_throttle);
@@ -4582,7 +4640,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_kafka_bufq_init(&rkb->rkb_outbufs);
 	rd_kafka_bufq_init(&rkb->rkb_waitresps);
 	rd_kafka_bufq_init(&rkb->rkb_retrybufs);
-	rd_kafka_q_init(&rkb->rkb_ops, rk);
+	rkb->rkb_ops = rd_kafka_q_new(rk);
 	rd_avg_init(&rkb->rkb_avg_rtt, RD_AVG_GAUGE);
 	rd_avg_init(&rkb->rkb_avg_throttle, RD_AVG_GAUGE);
         rd_refcnt_init(&rkb->rkb_refcnt, 0);
@@ -4944,7 +5002,7 @@ void rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
                         strncpy(rko->rko_u.node.nodename, nodename,
 				sizeof(rko->rko_u.node.nodename)-1);
                         rko->rko_u.node.nodeid   = mdb->id;
-                        rd_kafka_q_enq(&rkb->rkb_ops, rko);
+                        rd_kafka_q_enq(rkb->rkb_ops, rko);
                 }
                 rd_kafka_broker_destroy(rkb);
         }

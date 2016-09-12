@@ -33,6 +33,24 @@
 /* Forward declarations */
 typedef struct rd_kafka_q_s rd_kafka_q_t;
 typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
+typedef struct rd_kafka_op_s rd_kafka_op_t;
+
+/* One-off reply queue + reply version.
+ * All APIs that take a rd_kafka_replyq_t makes a copy of the
+ * struct as-is and grabs hold of the existing .q refcount.
+ * Think of replyq as a (Q,VERSION) tuple. */
+typedef struct rd_kafka_replyq_s {
+	rd_kafka_q_t *q;
+	int32_t       version;
+#if ENABLE_DEVEL
+	char *_id; /* Devel id used for debugging reference leaks.
+		    * Is a strdup() of the caller's function name,
+		    * which makes for easy debugging with valgrind. */
+#endif
+} rd_kafka_replyq_t;
+
+
+
 
 /**
  * Flags used by:
@@ -63,9 +81,10 @@ typedef enum {
         RD_KAFKA_OP_XMIT_BUF, /* transmit buffer: any -> broker thread */
         RD_KAFKA_OP_RECV_BUF, /* received response buffer: broker thr -> any */
         RD_KAFKA_OP_XMIT_RETRY, /* retry buffer xmit: any -> broker thread */
-        RD_KAFKA_OP_FETCH_START, /* Application -> toppar's Broker thread */
-        RD_KAFKA_OP_FETCH_STOP,  /* Application -> toppar's Broker thread */
-        RD_KAFKA_OP_SEEK,        /* Application -> toppar's Broker thread */
+        RD_KAFKA_OP_FETCH_START, /* Application -> toppar's handler thread */
+        RD_KAFKA_OP_FETCH_STOP,  /* Application -> toppar's handler thread */
+        RD_KAFKA_OP_SEEK,        /* Application -> toppar's handler thread */
+	RD_KAFKA_OP_PAUSE,       /* Application -> toppar's handler thread */
         RD_KAFKA_OP_OFFSET_FETCH, /* Broker -> broker thread: fetch offsets
                                    * for topic. */
 
@@ -98,7 +117,7 @@ typedef enum {
 #define RD_KAFKA_OP_TYPE_ASSERT(rko,type) \
 	rd_kafka_assert(NULL, (rko)->rko_type == (type) && # type)
 
-typedef struct rd_kafka_op_s {
+struct rd_kafka_op_s {
 	TAILQ_ENTRY(rd_kafka_op_s) rko_link;
 
 	rd_kafka_op_type_t    rko_type;   /* Internal op type */
@@ -111,9 +130,14 @@ typedef struct rd_kafka_op_s {
 
 	shptr_rd_kafka_toppar_t *rko_rktp;
 
-        /* Generic fields */
-        rd_kafka_q_t   *rko_replyq;    /* Indicates request: enq reply
-                                        * on this queue. Refcounted. */
+        /*
+	 * Generic fields
+	 */
+
+	/* Indicates request: enqueue reply on rko_replyq.q with .version.
+	 * .q is refcounted. */
+	rd_kafka_replyq_t rko_replyq;
+
 	rd_kafka_t     *rko_rk;
 
         /* RD_KAFKA_OP_CB */
@@ -133,6 +157,11 @@ typedef struct rd_kafka_op_s {
 
 		struct {
 			rd_kafka_topic_partition_list_t *partitions;
+			void (*cb) (rd_kafka_t *rk,
+				    rd_kafka_resp_err_t err,
+				    rd_kafka_topic_partition_list_t *offsets,
+				    void *opaque);
+			void *opaque;
 		} offset_commit;
 
 		struct {
@@ -200,8 +229,13 @@ typedef struct rd_kafka_op_s {
 			int64_t offset;
 			struct rd_kafka_cgrp_s *rkcg;
 		} fetch_start; /* reused for SEEK */
+
+		struct {
+			int pause;
+			int flag;
+		} pause;
 	} rko_u;
-} rd_kafka_op_t;
+};
 
 TAILQ_HEAD(rd_kafka_op_head_s, rd_kafka_op_s);
 
@@ -218,13 +252,16 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
 
 int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err);
 
+
+
+
 #define rd_kafka_op_err(rk,err,...) do {				\
 		if (!(rk)->rk_conf.error_cb) {				\
-			rd_kafka_log(rk, LOG_ERR, "ERROR", __VA_ARGS__);	\
+			rd_kafka_log(rk, LOG_ERR, "ERROR", __VA_ARGS__); \
 			break;						\
 		}							\
-		rd_kafka_q_op_err(&(rk)->rk_rep, RD_KAFKA_OP_ERR, err, 0, \
-				  NULL, 0, __VA_ARGS__);			\
+		rd_kafka_q_op_err((rk)->rk_rep, RD_KAFKA_OP_ERR, err, 0, \
+				  NULL, 0, __VA_ARGS__);		\
 	} while (0)
 
 void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_op_type_t optype,
@@ -246,3 +283,5 @@ void rd_kafka_op_throttle_time (struct rd_kafka_broker_s *rkb,
 int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko);
 
 extern rd_atomic32_t rd_kafka_op_cnt;
+
+void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko);
