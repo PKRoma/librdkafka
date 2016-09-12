@@ -2080,7 +2080,9 @@ rd_kafka_assignment (rd_kafka_t *rk,
  * is done, returning the resulting success or error code.
  *
  * If a rd_kafka_conf_set_offset_commit_cb() offset commit callback has been
- * configured a callback will be enqueued for a future call to rd_kafka_poll().
+ * configured:
+ *  * if async: callback will be enqueued for a future call to rd_kafka_poll().
+ *  * if !async: callback will be called from rd_kafka_commit()
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_commit (rd_kafka_t *rk, const rd_kafka_topic_partition_list_t *offsets,
@@ -2089,12 +2091,41 @@ rd_kafka_commit (rd_kafka_t *rk, const rd_kafka_topic_partition_list_t *offsets,
 
 /**
  * @brief Commit message's offset on broker for the message's partition.
+ *
+ * @sa rd_kafka_commit
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
                          int async);
 
 
+/**
+ * @brief Commit offsets on broker for the provided list of partitions.
+ *
+ * See rd_kafka_commit for \p offsets semantics.
+ *
+ * The result of the offset commit will be posted on the provided \p rkqu queue.
+ *
+ * If the application uses one of the poll APIs (rd_kafka_poll(),
+ * rd_kafka_consumer_poll(), rd_kafka_queue_poll(), ..) to serve the queue
+ * the \p cb callback is required. \p opaque is passed to the callback.
+ *
+ * If using the event API the callback is ignored and the offset commit result
+ * will be returned as an RD_KAFKA_EVENT_COMMIT event. The \p opaque
+ * value will be available with rd_kafka_event_opaque()
+ *
+ * @sa rd_kafka_commit()
+ * @sa rd_kafka_conf_set_offset_commit_cb()
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_commit_queue (rd_kafka_t *rk,
+		       const rd_kafka_topic_partition_list_t *offsets,
+		       rd_kafka_queue_t *rkqu,
+		       void (*cb) (rd_kafka_t *rk,
+				   rd_kafka_resp_err_t err,
+				   rd_kafka_topic_partition_list_t *offsets,
+				   void *opaque),
+		       void *opaque);
 
 
 /**
@@ -2634,11 +2665,12 @@ rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk);
  */
 typedef enum rd_kafka_event_type_t {
 	RD_KAFKA_EVENT_NONE,
-	RD_KAFKA_EVENT_DR,        /**< Delivery report batch (producer) */
-	RD_KAFKA_EVENT_FETCH,     /**< Fetched message (consumer) */
-	RD_KAFKA_EVENT_LOG,       /**< Log message */
-	RD_KAFKA_EVENT_ERROR,     /**< Error */
-	RD_KAFKA_EVENT_REBALANCE, /**< Group rebalance (consumer) */
+	RD_KAFKA_EVENT_DR,            /**< Delivery report batch (producer) */
+	RD_KAFKA_EVENT_FETCH,         /**< Fetched message (consumer) */
+	RD_KAFKA_EVENT_LOG,           /**< Log message */
+	RD_KAFKA_EVENT_ERROR,         /**< Error */
+	RD_KAFKA_EVENT_REBALANCE,     /**< Group rebalance (consumer) */
+	RD_KAFKA_EVENT_OFFSET_COMMIT  /**< Offset commit result */
 } rd_kafka_event_type_t;
 
 typedef struct rd_kafka_op_s rd_kafka_event_t;
@@ -2705,7 +2737,8 @@ const rd_kafka_message_t *rd_kafka_event_message_next (rd_kafka_event_t *rkev);
  */
 RD_EXPORT
 size_t rd_kafka_event_message_array (rd_kafka_event_t *rkev,
-				     const rd_kafka_message_t **rkmessages, size_t size);
+				     const rd_kafka_message_t **rkmessages,
+				     size_t size);
 
 
 /**
@@ -2723,19 +2756,33 @@ size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev);
  * @returns the error code for the event.
  *
  * Event types:
- *  - RD_KAFKA_EVENT_ERROR
+ *  - all
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_event_error (rd_kafka_event_t *rkev);
 
 
 /**
- * @returns the error string (if any) for an RD_KAFKA_EVENT_ERROR event.
+ * @returns the error string (if any).
+ *          An application should check that rd_kafka_event_error() returns
+ *          non-zero before calling this function.
+ *
  * Event types:
- *  - RD_KAFKA_EVENT_ERROR
+ *  - all
  */
 RD_EXPORT
 const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev);
+
+
+
+/**
+ * @returns the user opaque (if any)
+ *
+ * Event types:
+ *  - RD_KAFKA_OFFSET_COMMIT
+ */
+RD_EXPORT
+void *rd_kafka_event_opaque (rd_kafka_event_t *rkev);
 
 
 /**
@@ -2758,6 +2805,7 @@ int rd_kafka_event_log (rd_kafka_event_t *rkev,
  *
  * Event types:
  *  - RD_KAFKA_EVENT_REBALANCE
+ *  - RD_KAFKA_EVENT_OFFSET_COMMIT
  */
 RD_EXPORT rd_kafka_topic_partition_list_t *
 rd_kafka_event_topic_partition_list (rd_kafka_event_t *rkev);
