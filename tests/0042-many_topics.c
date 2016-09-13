@@ -234,12 +234,14 @@ int main_0042_many_topics (int argc, char **argv) {
 	/* Generate unique topic names */
 	topics = malloc(sizeof(*topics) * topic_cnt);
 	for (i = 0 ; i < topic_cnt ; i++)
-		topics[i] = strdup(test_mk_topic_name(__FUNCTION__, 1));
+		topics[i] = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
 
 	produce_many(topics, topic_cnt, testid);
 	legacy_consume_many(topics, topic_cnt, testid);
-	subscribe_consume_many(topics, topic_cnt, testid);
-	assign_consume_many(topics, topic_cnt, testid);
+	if (test_broker_version >= TEST_BRKVER(0,9,0,0)) {
+		subscribe_consume_many(topics, topic_cnt, testid);
+		assign_consume_many(topics, topic_cnt, testid);
+	}
 
 	for (i = 0 ; i < topic_cnt ; i++)
 		free(topics[i]);
