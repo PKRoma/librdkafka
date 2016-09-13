@@ -391,9 +391,12 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	/* Put the outbufs back on queue */
 	rd_kafka_bufq_concat(&rkb->rkb_outbufs, &tmpq);
 
-	/* Purge connection-setup requests from outbufs since they will be
-	 * reissued on the next connect. */
-	rd_kafka_bufq_purge_connsetup(rkb, &rkb->rkb_outbufs);
+	/* Update bufq for connection reset:
+	 *  - Purge connection-setup requests from outbufs since they will be
+	 *    reissued on the next connect.
+	 *  - Reset any partially sent buffer's offset.
+	 */
+	rd_kafka_bufq_connection_reset(rkb, &rkb->rkb_outbufs);
 
 	internal_rkb = rd_kafka_broker_internal(rkb->rkb_rk);
 
@@ -4613,7 +4616,6 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 					const char *name, uint16_t port,
 					int32_t nodeid) {
 	rd_kafka_broker_t *rkb;
-	int err;
 #ifndef _MSC_VER
 	sigset_t newset, oldset;
 #endif
@@ -4682,12 +4684,12 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	 * the broker thread until we've finalized the rkb. */
 	rd_kafka_broker_lock(rkb);
         rd_kafka_broker_keep(rkb); /* broker thread's refcnt */
-	if ((err = thrd_create(&rkb->rkb_thread,
-		rd_kafka_broker_thread_main, rkb)) != thrd_success) {
+	if (thrd_create(&rkb->rkb_thread,
+			rd_kafka_broker_thread_main, rkb) != thrd_success) {
 		char tmp[512];
 		rd_snprintf(tmp, sizeof(tmp),
 			 "Unable to create broker thread: %s (%i)",
-			 rd_strerror(err), err);
+			 rd_strerror(errno), errno);
 		rd_kafka_log(rk, LOG_CRIT, "THREAD", "%s", tmp);
 
 		rd_kafka_broker_unlock(rkb);

@@ -27,62 +27,51 @@
  */
 
 #include "test.h"
-
-/* Typical include path would be <librdkafka/rdkafka.h>, but this program
- * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h"  /* for Kafka driver */
+#include "rdkafka.h"
 
 
 /**
- * Various regression tests for hangs on destroy.
+ * Make sure library behaves even if there is no broker connection.
  */
 
 
 
-
-
-/**
- * Issue #530:
- * "Legacy Consumer. Delete hangs if done right after RdKafka::Consumer::create.
- *  But If I put a start and stop in between, there is no issue."
- */
-static int legacy_consumer_early_destroy (void) {
+static void test_producer_no_connection (void) {
 	rd_kafka_t *rk;
+	rd_kafka_conf_t *conf;
 	rd_kafka_topic_t *rkt;
-	int pass;
-	const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+	int i;
+	const int partition_cnt = 2;
+	int msgcnt = 0;
+	test_timing_t t_destroy;
 
-	for (pass = 0 ; pass < 2 ; pass++) {
-		TEST_SAY("%s: pass #%d\n", __FUNCTION__, pass);
+	test_conf_init(&conf, NULL, 20);
 
-		rk = test_create_handle(RD_KAFKA_CONSUMER, NULL);
+	test_conf_set(conf, "bootstrap.servers", NULL);
 
-		if (pass == 1) {
-			/* Second pass, create a topic too. */
-			rkt = rd_kafka_topic_new(rk, topic, NULL);
-			TEST_ASSERT(rkt, "failed to create topic: %s",
-				    rd_kafka_err2str(
-					    rd_kafka_errno2err(errno)));
-			rd_sleep(1);
-			rd_kafka_topic_destroy(rkt);
-		}
+	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+	rkt = test_create_topic_object(rk, __FUNCTION__,
+				       "message.timeout.ms", "5000", NULL);
 
-		rd_kafka_destroy(rk);
-	}
+	test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0, 100,
+				 NULL, 100, &msgcnt);
+	for (i = 0 ; i < partition_cnt ; i++)
+		test_produce_msgs_nowait(rk, rkt, 0, i,
+					 0, 100, NULL, 100, &msgcnt);
 
-	return 0;
+	rd_kafka_poll(rk, 1000);
+
+	TEST_SAY("%d messages in queue\n", rd_kafka_outq_len(rk));
+
+	rd_kafka_topic_destroy(rkt);
+
+	TIMING_START(&t_destroy, "rd_kafka_destroy()");
+	rd_kafka_destroy(rk);
+	TIMING_STOP(&t_destroy);
 }
 
-
-int main_0037_destroy_hang_local (int argc, char **argv) {
-        int fails = 0;
-
-	test_conf_init(NULL, NULL, 30);
-
-	fails += legacy_consumer_early_destroy();
-
-        if (fails > 0)
-                TEST_FAIL("See %d previous error(s)\n", fails);
+int main_0043_no_connection (int argc, char **argv) {
+	test_producer_no_connection();
 
         return 0;
 }
