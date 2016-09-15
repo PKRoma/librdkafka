@@ -33,23 +33,29 @@
 
 
 #include <stdlib.h>
-//#include <inttypes.h>
 #include <sys/types.h>
 #include <time.h>
 #include <assert.h>
 #define WIN32_MEAN_AND_LEAN
 #include <Winsock2.h>  /* for struct timeval */
-typedef short              int16_t;
-typedef int                int32_t;
-typedef long long          int64_t;
+typedef short int16_t;
+typedef int int32_t;
+typedef long long int64_t;
 typedef unsigned long long uint64_t;
-#define _PFX_32  "l"
-#define _PFX_64  "ll"
-#define PRId32       _PFX_32 "d"
-#define PRIu32       _PFX_32 "u"
-#define PRId64       _PFX_64 "d"
-#define PRIu64       _PFX_64 "u"
+#define _PFX_32 "l"
+#define _PFX_64 "ll"
+#define PRId32 _PFX_32 "d"
+#define PRIu32 _PFX_32 "u"
+#define PRId64 _PFX_64 "d"
+#define PRIu64 _PFX_64 "u"
 #define bool int
+#pragma intrinsic(_InterlockedIncrement)
+#pragma intrinsic(_InterlockedDecrement)
+#pragma intrinsic(_InterlockedExchangeAdd)
+#define InterlockedIncrement _InterlockedIncrement
+#define InterlockedDecrement _InterlockedDecrement
+#define InterlockedExchangeAdd _InterlockedExchangeAdd
+#define InterlockedAdd _InterlockedExchangeAdd
 
 
 /**
@@ -186,7 +192,7 @@ int rd_gettimeofday (struct timeval *tv, struct timezone *tz) {
 	SystemTimeToFileTime(&st, &ft);
 	d.HighPart = ft.dwHighDateTime;
 	d.LowPart  = ft.dwLowDateTime;
-	tv->tv_sec  = (long)((d.QuadPart - 116444736000000000LL) / 10000000L);
+	tv->tv_sec  = (long)((d.QuadPart - 116444736000000000ll) / 10000000L);
 	tv->tv_usec = (long)(st.wMilliseconds * 1000);
 
 	return 0;

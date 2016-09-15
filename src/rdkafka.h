@@ -44,7 +44,6 @@
 #pragma once
 
 #include <stdio.h>
-//#include <inttypes.h>
 #include <sys/types.h>
 
 #ifdef __cplusplus

@@ -202,18 +202,14 @@ void rd_kafka_set_log_level (rd_kafka_t *rk, int level) {
 
 static const char *rd_kafka_type2str (rd_kafka_type_t type) {
 	static const char *types[] = {
-		"producer",
-		"consumer",
+		"producer", //[RD_KAFKA_PRODUCER] = "producer",
+		"consumer", //[RD_KAFKA_CONSUMER] = "consumer",
 	};
-	//static const char *types[] = {
-	//	[RD_KAFKA_PRODUCER] = "producer",
-	//	[RD_KAFKA_CONSUMER] = "consumer",
-	//};
 	return types[type];
 }
 
 #define _ERR_DESC(ENUM,DESC) \
-	{ ENUM, # ENUM + 18/*pfx*/, DESC }
+	{ ENUM, # ENUM + 18/*pfx*/, DESC } //[ENUM - RD_KAFKA_RESP_ERR__BEGIN] = { ENUM, # ENUM + 18/*pfx*/, DESC }
 
 static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 	_ERR_DESC(RD_KAFKA_RESP_ERR__BEGIN, NULL),
@@ -600,7 +596,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 
 
         /* Join broker threads */
-        RD_LIST_FOREACH(thrd, &wait_thrds, i) {
+          RD_LIST_FOREACH(thrd, &wait_thrds, i) {
                 if (thrd_join(*thrd, NULL) != thrd_success)
                         ;
                 free(thrd);

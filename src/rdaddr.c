@@ -153,6 +153,7 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 	int r;
 	int cnt = 0;
 	rd_sockaddr_list_t *rsal;
+
 	hints.ai_family = family;
 	hints.ai_socktype = socktype;
 	hints.ai_protocol = protocol;
