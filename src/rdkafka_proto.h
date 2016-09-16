@@ -145,7 +145,7 @@ struct rd_kafka_ApiVersion {
  * @brief ApiVersion.ApiKey comparator.
  */
 static RD_UNUSED int rd_kafka_ApiVersion_key_cmp (const void *_a, const void *_b) {
-	const struct rd_kafka_ApiVersion *a = _a, *b = _b;
+	const struct rd_kafka_ApiVersion *a = (const struct rd_kafka_ApiVersion *)_a, *b = (const struct rd_kafka_ApiVersion *)_b;
 
 	return a->ApiKey - b->ApiKey;
 }
@@ -222,7 +222,7 @@ rd_kafkap_str_t *rd_kafkap_str_new (const char *str, int len) {
 	else if (len == -1)
 		len = str ? (int)strlen(str) : RD_KAFKAP_STR_LEN_NULL;
 
-	kstr = rd_malloc(sizeof(*kstr) + 2 +
+	kstr = (rd_kafkap_str_t *)rd_malloc(sizeof(*kstr) + 2 +
 			 (len == RD_KAFKAP_STR_LEN_NULL ? 0 : len + 1));
 	kstr->len = len;
 
@@ -299,7 +299,7 @@ typedef struct rd_kafkap_bytes_s {
 	int32_t     len;   /* Kafka bytes length (-1=NULL, 0=empty, >0=data) */
 	const void *data;  /* points just past the struct, or other memory,
 			    * not NULL-terminated */
-	const char _data[]; /* Bytes following struct when new()ed */
+	char        _data[]; /* Bytes following struct when new()ed */
 } rd_kafkap_bytes_t;
 
 
@@ -350,7 +350,7 @@ rd_kafkap_bytes_t *rd_kafkap_bytes_new (const char *bytes, int32_t len) {
 	if (len == RD_KAFKAP_BYTES_LEN_NULL)
 		kbytes->data = NULL;
 	else {
-		kbytes->data = ((const char *)(kbytes+1))+4;
+		kbytes->data = ((char *)(kbytes+1))+4;
 		memcpy((void *)kbytes->data, bytes, len);
 	}
 

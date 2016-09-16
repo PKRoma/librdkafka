@@ -137,8 +137,8 @@ void rd_list_destroy (rd_list_t *rl, void (*free_cb) (void *));
  */
 void *rd_list_elem (const rd_list_t *rl, int idx);
 
-#define RD_LIST_FOREACH(elem,listp,idx) \
-        for (idx = 0 ; (elem = rd_list_elem(listp, idx)) ; idx++)
+#define RD_LIST_FOREACH(elem,listp,idx,t) \
+        for (idx = 0 ; (elem = (t *)rd_list_elem(listp, idx)) ; idx++)
 
 #define RD_LIST_FOREACH_REVERSE(elem,listp,idx)                         \
         for (idx = (listp)->rl_cnt-1 ;                                  \
