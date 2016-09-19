@@ -117,7 +117,7 @@ void *rd_list_remove (rd_list_t *rl, void *match_elem) {
         void *elem;
         int i;
 
-        RD_LIST_FOREACH(elem, rl, i) {
+        RD_LIST_FOREACH(elem, rl, i, void) {
                 if (elem == match_elem) {
                         rd_list_remove0(rl, i);
                         return elem;
@@ -133,7 +133,7 @@ void *rd_list_remove_cmp (rd_list_t *rl, void *match_elem,
         void *elem;
         int i;
 
-        RD_LIST_FOREACH(elem, rl, i) {
+        RD_LIST_FOREACH(elem, rl, i, void) {
                 if (match_elem == cmp ||
                     !cmp(elem, match_elem)) {
                         rd_list_remove0(rl, i);
@@ -217,7 +217,7 @@ void *rd_list_find (const rd_list_t *rl, const void *match,
 		return r ? *r : NULL;
 	}
 
-        RD_LIST_FOREACH(elem, rl, i) {
+        RD_LIST_FOREACH(elem, rl, i, const void) {
                 if (!cmp(match, elem))
                         return (void *)elem;
         }

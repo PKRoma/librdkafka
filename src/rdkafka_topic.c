@@ -424,7 +424,7 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
 	rktp_ua = rd_kafka_toppar_get(rkt, RD_KAFKA_PARTITION_UA, 0);
 
         /* Propagate notexist errors for desired partitions */
-        RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i)
+        RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i, shptr_rd_kafka_toppar_t)
                 rd_kafka_toppar_enq_error(rd_kafka_toppar_s2i(s_rktp),
                                           RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
 
@@ -505,7 +505,7 @@ static void rd_kafka_topic_propagate_notexists (rd_kafka_itopic_t *rkt) {
 
 
         /* Notify consumers that the topic doesn't exist. */
-        RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i)
+        RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i, shptr_rd_kafka_toppar_t)
                 rd_kafka_toppar_enq_error(rd_kafka_toppar_s2i(s_rktp),
                                           RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
 }

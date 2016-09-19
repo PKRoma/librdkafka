@@ -1007,7 +1007,7 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_kstr(rkbuf, protocol_type);
         rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.enabled_assignor_cnt);
 
-        RD_LIST_FOREACH(rkas, &rk->rk_conf.partition_assignors, i) {
+        RD_LIST_FOREACH(rkas, &rk->rk_conf.partition_assignors, i, rd_kafka_assignor_t) {
                 rd_kafkap_bytes_t *member_metadata;
 		if (!rkas->rkas_enabled)
 			continue;

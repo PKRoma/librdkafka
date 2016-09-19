@@ -52,7 +52,7 @@ void rd_kafka_q_init (rd_kafka_q_t *rkq, rd_kafka_t *rk) {
  * Allocate a new queue and initialize it.
  */
 rd_kafka_q_t *rd_kafka_q_new0 (rd_kafka_t *rk, const char *func, int line) {
-        rd_kafka_q_t *rkq = rd_malloc(sizeof(*rkq));
+        rd_kafka_q_t *rkq = (rd_kafka_q_t *)rd_malloc(sizeof(*rkq));
         rd_kafka_q_init(rkq, rk);
         rkq->rkq_flags |= RD_KAFKA_Q_F_ALLOCATED;
 #if ENABLE_DEVEL
@@ -287,6 +287,7 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
 
 	if (!rkq->rkq_fwdq) {
                 do {
+			rd_ts_t pre;
                         /* Filter out outdated ops */
                         while ((rko = TAILQ_FIRST(&rkq->rkq_q)) &&
                                !(rko = rd_kafka_op_filter(rkq, rko, version)))
@@ -316,7 +317,7 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
                         }
 
                         /* No op, wait for one */
-			rd_ts_t pre = rd_clock();
+			pre = rd_clock();
 			if (cnd_timedwait_ms(&rkq->rkq_cond,
 					     &rkq->rkq_lock,
 					     timeout_ms) ==
@@ -459,7 +460,7 @@ void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage) {
 
 rd_kafka_message_t *rd_kafka_message_new (void) {
         rd_kafka_message_t *rkmessage;
-        rkmessage = rd_calloc(1, sizeof(*rkmessage));
+        rkmessage = (rd_kafka_message_t *)rd_calloc(1, sizeof(*rkmessage));
         return rkmessage;
 }
 
@@ -652,7 +653,7 @@ void rd_kafka_queue_destroy (rd_kafka_queue_t *rkqu) {
 rd_kafka_queue_t *rd_kafka_queue_new0 (rd_kafka_t *rk, rd_kafka_q_t *rkq) {
 	rd_kafka_queue_t *rkqu;
 
-	rkqu = rd_calloc(1, sizeof(*rkqu));
+	rkqu = (rd_kafka_queue_t *)rd_calloc(1, sizeof(*rkqu));
 
 	rkqu->rkqu_q = rkq;
 	rd_kafka_q_keep(rkq);
@@ -701,7 +702,7 @@ void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
 	struct rd_kafka_q_io *qio;
 
 	if (fd != -1) {
-		qio = rd_malloc(sizeof(*qio) + size);
+		qio = (struct rd_kafka_q_io *)rd_malloc(sizeof(*qio) + size);
 		qio->fd = fd;
 		qio->size = size;
 		qio->payload = (void *)(qio+1);

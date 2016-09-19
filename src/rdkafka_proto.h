@@ -84,27 +84,26 @@ struct rd_kafkap_reshdr {
 
 
 
-#ifndef _MSC_VER
 static RD_UNUSED
 const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 	static const char *names[] = {
-		[RD_KAFKAP_Produce] = "Produce",
-		[RD_KAFKAP_Fetch] = "Fetch",
-		[RD_KAFKAP_Offset] = "Offset",
-		[RD_KAFKAP_Metadata] = "Metadata",
-		[RD_KAFKAP_LeaderAndIsr] = "LeaderAndIsr",
-		[RD_KAFKAP_StopReplica] = "StopReplica",
-		[RD_KAFKAP_OffsetCommit] = "OffsetCommit",
-		[RD_KAFKAP_OffsetFetch] = "OffsetFetch",
-		[RD_KAFKAP_GroupCoordinator] = "GroupCoordinator",
-                [RD_KAFKAP_JoinGroup] = "JoinGroup",
-                [RD_KAFKAP_Heartbeat] = "Heartbeat",
-                [RD_KAFKAP_LeaveGroup] = "LeaveGroup",
-                [RD_KAFKAP_SyncGroup] = "SyncGroup",
-		[RD_KAFKAP_DescribeGroups] = "DescribeGroups",
-		[RD_KAFKAP_ListGroups] = "ListGroups",
-		[RD_KAFKAP_SaslHandshake] = "SaslHandshake",
-		[RD_KAFKAP_ApiVersion] = "ApiVersion"
+		"Produce", //[RD_KAFKAP_Produce] = "Produce",
+		"Fetch", //[RD_KAFKAP_Fetch] = "Fetch",
+		"Offset", //[RD_KAFKAP_Offset] = "Offset",
+		"Metadata", //[RD_KAFKAP_Metadata] = "Metadata",
+		"LeaderAndIsr", //[RD_KAFKAP_LeaderAndIsr] = "LeaderAndIsr",
+		"StopReplica", //[RD_KAFKAP_StopReplica] = "StopReplica",
+		"OffsetCommit", //[RD_KAFKAP_OffsetCommit] = "OffsetCommit",
+		"OffsetFetch", //[RD_KAFKAP_OffsetFetch] = "OffsetFetch",
+		"GroupCoordinator", //[RD_KAFKAP_GroupCoordinator] = "GroupCoordinator",
+                "JoinGroup", //[RD_KAFKAP_JoinGroup] = "JoinGroup",
+                "Heartbeat", //[RD_KAFKAP_Heartbeat] = "Heartbeat",
+                "LeaveGroup", //[RD_KAFKAP_LeaveGroup] = "LeaveGroup",
+                "SyncGroup", //[RD_KAFKAP_SyncGroup] = "SyncGroup",
+		"DescribeGroups", //[RD_KAFKAP_DescribeGroups] = "DescribeGroups",
+		"ListGroups", //[RD_KAFKAP_ListGroups] = "ListGroups",
+		"SaslHandshake", //[RD_KAFKAP_SaslHandshake] = "SaslHandshake",
+		"ApiVersion" //[RD_KAFKAP_ApiVersion] = "ApiVersion"
 
 	};
 	static RD_TLS char ret[32];
@@ -116,7 +115,6 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 
 	return names[ApiKey];
 }
-#endif
 
 
 
@@ -340,7 +338,7 @@ rd_kafkap_bytes_t *rd_kafkap_bytes_new (const char *bytes, int32_t len) {
 	if (!bytes)
 		len = RD_KAFKAP_BYTES_LEN_NULL;
 
-	kbytes = rd_malloc(sizeof(*kbytes) + 4 +
+	kbytes = (rd_kafkap_bytes_t *)rd_malloc(sizeof(*kbytes) + 4 +
 			 (len == RD_KAFKAP_BYTES_LEN_NULL ? 0 : len));
 	kbytes->len = len;
 
@@ -364,7 +362,7 @@ rd_kafkap_bytes_t *rd_kafkap_bytes_new (const char *bytes, int32_t len) {
  */
 static RD_INLINE RD_UNUSED
 rd_kafkap_bytes_t *rd_kafkap_bytes_copy (const rd_kafkap_bytes_t *src) {
-        return rd_kafkap_bytes_new(src->data, src->len);
+        return rd_kafkap_bytes_new((const char *)src->data, src->len);
 }
 
 

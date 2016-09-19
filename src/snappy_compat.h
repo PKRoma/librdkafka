@@ -27,7 +27,6 @@
 #include <assert.h>
 #include <string.h>
 #include <errno.h>
-//#include <stdbool.h>
 #include <limits.h>
 #if !defined(__WIN32__) && !defined(_MSC_VER)
 #include <sys/uio.h>

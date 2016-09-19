@@ -1,10 +1,7 @@
 #ifndef _LINUX_SNAPPY_H
 #define _LINUX_SNAPPY_H 1
 
-//#include <stdbool.h>
-#ifdef _MSC_VER
-#include "rdwin32.h"
-#endif
+#define bool int
 #include <stddef.h>
 
 /* Only needed for compression. This preallocates the worst case */

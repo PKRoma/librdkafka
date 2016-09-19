@@ -450,7 +450,7 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_desired_get (rd_kafka_itopic_t *rkt,
 	shptr_rd_kafka_toppar_t *s_rktp;
         int i;
 
-	RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i) {
+	RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i, shptr_rd_kafka_toppar_t) {
                 rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
 		if (rktp->rktp_partition == partition)
 			return rd_kafka_toppar_keep(rktp);

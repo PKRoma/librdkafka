@@ -82,10 +82,10 @@ const char *rd_kafka_broker_state_names[] = {
 };
 
 const char *rd_kafka_secproto_names[] = {
-	[RD_KAFKA_PROTO_PLAINTEXT] = "plaintext",
-	[RD_KAFKA_PROTO_SSL] = "ssl",
-	[RD_KAFKA_PROTO_SASL_PLAINTEXT] = "sasl_plaintext",
-	[RD_KAFKA_PROTO_SASL_SSL] = "sasl_ssl",
+	"plaintext", //[RD_KAFKA_PROTO_PLAINTEXT] = "plaintext",
+	"ssl", //[RD_KAFKA_PROTO_SSL] = "ssl",
+	"sasl_plaintext", //[RD_KAFKA_PROTO_SASL_PLAINTEXT] = "sasl_plaintext",
+	"sasl_ssl", //[RD_KAFKA_PROTO_SASL_SSL] = "sasl_ssl",
 	NULL
 };
 
@@ -1126,7 +1126,7 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
 		   (float)req->rkbuf_ts_sent / 1000.0f);
 
 	/* Call callback. */
-        rd_kafka_buf_callback(rkb->rkb_rk, rkb, 0, rkbuf, req);
+        rd_kafka_buf_callback(rkb->rkb_rk, rkb, RD_KAFKA_RESP_ERR_NO_ERROR, rkbuf, req);
 
 	return 0;
 }
@@ -1819,7 +1819,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		if (!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_NO_RESPONSE))
 			rd_kafka_bufq_enq(&rkb->rkb_waitresps, rkbuf);
 		else { /* Call buffer callback for delivery report. */
-                        rd_kafka_buf_callback(rkb->rkb_rk, rkb, 0, NULL, rkbuf);
+                        rd_kafka_buf_callback(rkb->rkb_rk, rkb, RD_KAFKA_RESP_ERR_NO_ERROR, NULL, rkbuf);
                 }
 
 		cnt++;
@@ -1960,7 +1960,7 @@ rd_kafka_produce_reply_handle (rd_kafka_broker_t *rkb,
 	}
 
 
-	return hdr.ErrorCode;
+	return (rd_kafka_resp_err_t)hdr.ErrorCode;
 
 err:
 	return RD_KAFKA_RESP_ERR__BAD_MSG;
@@ -1976,7 +1976,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_t *rk,
 					   rd_kafka_buf_t *reply,
 					   rd_kafka_buf_t *request,
 					   void *opaque) {
-	shptr_rd_kafka_toppar_t *s_rktp = opaque;
+	shptr_rd_kafka_toppar_t *s_rktp = (shptr_rd_kafka_toppar_t *)opaque;
         rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
         int64_t offset = RD_KAFKA_OFFSET_INVALID;
 
@@ -2511,7 +2511,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 		siov.iov_len = deflateBound(&strm, MessageSetSize);
 		siov.iov_base = rd_malloc(siov.iov_len);
 
-		strm.next_out = (void *)siov.iov_base;
+		strm.next_out = (Bytef *)siov.iov_base;
 		strm.avail_out = (uInt) siov.iov_len;
 
 		/* Iterate through each message and compress it. */
@@ -2521,7 +2521,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 			if (rkbuf->rkbuf_msg.msg_iov[i].iov_len == 0)
 				continue;
 
-			strm.next_in = (void *)rkbuf->rkbuf_msg.
+			strm.next_in = (Bytef *)rkbuf->rkbuf_msg.
 				msg_iov[i].iov_base;
 			strm.avail_in = (uInt) rkbuf->rkbuf_msg.msg_iov[i].iov_len;
 
@@ -2886,7 +2886,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 enum {
                         _UPD_NAME = 0x1,
                         _UPD_ID = 0x2
-                } updated = 0;
+                }; int updated = 0;
                 char brokername[RD_KAFKA_NODENAME_SIZE];
 
                 rd_kafka_broker_lock(rkb);
@@ -3415,7 +3415,7 @@ static char *rd_kafka_snappy_java_decompress (rd_kafka_broker_t *rkb,
 			}
 
 			/* Allocate memory for uncompressed data */
-			outbuf = rd_malloc(uof);
+			outbuf = (char *)rd_malloc(uof);
 			if (unlikely(!outbuf)) {
 				rd_rkb_dbg(rkb, MSG, "SNAPPY",
 					   "Failed to allocate memory for uncompressed "

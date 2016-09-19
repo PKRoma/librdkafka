@@ -58,6 +58,9 @@
 
 #include "rd.h"
 
+#define true 1
+#define false 0
+
 #ifdef _MSC_VER
 #define inline __inline
 #endif
@@ -488,8 +491,9 @@ static inline bool writer_append_from_self(struct writer *w, u32 offset,
 					   u32 len)
 {
 	char *const op = w->op;
+	u32 space_left;
 	CHECK_LE(op, w->op_limit);
-	const u32 space_left = (u32) (w->op_limit - op);
+	space_left = (u32) (w->op_limit - op);
 
 	if ((unsigned)(op - w->base) <= offset - 1u)	/* -1u catches offset==0 */
 		return false;
@@ -516,8 +520,9 @@ static inline bool writer_append_from_self(struct writer *w, u32 offset,
 static inline bool writer_append(struct writer *w, const char *ip, u32 len)
 {
 	char *const op = w->op;
+	u32 space_left;
 	CHECK_LE(op, w->op_limit);
-	const u32 space_left = (u32) (w->op_limit - op);
+	space_left = (u32) (w->op_limit - op);
 	if (space_left < len)
 		return false;
 	memcpy(op, ip, len);
@@ -735,6 +740,7 @@ static u16 *get_hash_table(struct snappy_env *env, size_t input_size,
 			      int *table_size)
 {
 	unsigned htsize = 256;
+	u16 *table;
 
 	DCHECK(kmax_hash_table_size >= 256);
 	while (htsize < kmax_hash_table_size && htsize < input_size)
@@ -742,7 +748,6 @@ static u16 *get_hash_table(struct snappy_env *env, size_t input_size,
 	CHECK_EQ(0, htsize & (htsize - 1));
 	CHECK_LE(htsize, kmax_hash_table_size);
 
-	u16 *table;
 	table = env->hash_table;
 
 	*table_size = htsize;
@@ -813,8 +818,9 @@ static inline int find_match_length(const char *s1,
 				    const char *s2, const char *s2_limit)
 {
 	/* Implementation based on the x86-64 version, above. */
+	int matched;
 	DCHECK_GE(s2_limit, s2);
-	int matched = 0;
+	matched = 0;
 
 	while (s2 <= s2_limit - 4 &&
 	       UNALIGNED_LOAD32(s2) == UNALIGNED_LOAD32(s1 + matched)) {
@@ -904,19 +910,24 @@ static char *compress_fragment(const char *const input,
 {
 	/* "ip" is the input pointer, and "op" is the output pointer. */
 	const char *ip = input;
+	int shift;
+	const char *ip_end;
+	const char *baseip;
+	const char *next_emit;
+	unsigned kinput_margin_bytes;
 	CHECK_LE(input_size, kblock_size);
 	CHECK_EQ(table_size & (table_size - 1), 0);
-	const int shift = 32 - log2_floor(table_size);
+	shift = 32 - log2_floor(table_size);
 	DCHECK_EQ(UINT_MAX >> shift, table_size - 1);
-	const char *ip_end = input + input_size;
-	const char *baseip = ip;
+	ip_end = input + input_size;
+	baseip = ip;
 	/*
 	 * Bytes in [next_emit, ip) will be emitted as literal bytes.  Or
 	 *  [next_emit, ip_end) after the main loop.
 	 */
-	const char *next_emit = ip;
+	next_emit = ip;
 
-	const unsigned kinput_margin_bytes = 15;
+	kinput_margin_bytes = 15;
 
 	if (likely(input_size >= kinput_margin_bytes)) {
 		const char *const ip_limit = input + input_size -
@@ -924,6 +935,11 @@ static char *compress_fragment(const char *const input,
 
 		u32 next_hash;
 		for (next_hash = hash(++ip, shift);;) {
+			u32 skip_bytes;
+			const char *next_ip;
+			const char *candidate;
+			eight_bytes_reference input_bytes;
+			u32 candidate_bytes;
 			DCHECK_LT(next_emit, ip);
 /*
  * The body of this loop calls EmitLiteral once and then EmitCopy one or
@@ -952,15 +968,16 @@ static char *compress_fragment(const char *const input,
  * last match; dividing it by 32 (ie. right-shifting by five) gives the
  * number of bytes to move ahead for each iteration.
  */
-			u32 skip_bytes = 32;
+			skip_bytes = 32;
 
-			const char *next_ip = ip;
-			const char *candidate;
+			next_ip = ip;
 			do {
+				u32 hval;
+				u32 bytes_between_hash_lookups;
 				ip = next_ip;
-				u32 hval = next_hash;
+				hval = next_hash;
 				DCHECK_EQ(hval, hash(ip, shift));
-				u32 bytes_between_hash_lookups = skip_bytes++ >> 5;
+				bytes_between_hash_lookups = skip_bytes++ >> 5;
 				next_ip = ip + bytes_between_hash_lookups;
 				if (unlikely(next_ip > ip_limit)) {
 					goto emit_remainder;
@@ -992,8 +1009,7 @@ static char *compress_fragment(const char *const input,
  * by proceeding to the next iteration of the main loop.  We also can exit
  * this loop via goto if we get close to exhausting the input.
  */
-			eight_bytes_reference input_bytes;
-			u32 candidate_bytes = 0;
+			candidate_bytes = 0;
 
 			do {
 /*
@@ -1004,25 +1020,29 @@ static char *compress_fragment(const char *const input,
 				int matched = 4 +
 				    find_match_length(candidate + 4, ip + 4,
 						      ip_end);
+				int offset;
+				const char *insert_tail;
+				u32 prev_hash;
+				u32 cur_hash;
 				ip += matched;
-				int offset = (int) (base - candidate);
+				offset = (int) (base - candidate);
 				DCHECK_EQ(0, memcmp(base, candidate, matched));
 				op = emit_copy(op, offset, matched);
 /*
  * We could immediately start working at ip now, but to improve
  * compression we first update table[Hash(ip - 1, ...)].
  */
-				const char *insert_tail = ip - 1;
+				insert_tail = ip - 1;
 				next_emit = ip;
 				if (unlikely(ip >= ip_limit)) {
 					goto emit_remainder;
 				}
 				input_bytes = get_eight_bytes_at(insert_tail);
-				u32 prev_hash =
+				prev_hash =
 				    hash_bytes(get_u32_at_offset
 					       (input_bytes, 0), shift);
 				table[prev_hash] = (u16) (ip - baseip - 1);
-				u32 cur_hash =
+				cur_hash =
 				    hash_bytes(get_u32_at_offset
 					       (input_bytes, 1), shift);
 				candidate = baseip + table[cur_hash];
@@ -1137,20 +1157,23 @@ static void exit_snappy_decompressor(struct snappy_decompressor *d)
 static bool read_uncompressed_length(struct snappy_decompressor *d,
 				     u32 * result)
 {
+	u32 shift;
 	DCHECK(d->ip == NULL);	/*
 				 * Must not have read anything yet
 				 * Length is encoded in 1..5 bytes
 				 */
 	*result = 0;
-	u32 shift = 0;
+	shift = 0;
 	while (true) {
+		size_t n;
+		const char *ip;
+		unsigned char c;
 		if (shift >= 32)
 			return false;
-		size_t n;
-		const char *ip = peek(d->reader, &n);
+		ip = peek(d->reader, &n);
 		if (n == 0)
 			return false;
-		const unsigned char c = *(const unsigned char *)(ip);
+		c = *(unsigned char *)(ip);
 		skip(d->reader, 1);
 		*result |= (u32) (c & 0x7f) << shift;
 		if (c < 128) {
@@ -1188,6 +1211,7 @@ static void decompress_all_tags(struct snappy_decompressor *d,
 
 	MAYBE_REFILL();
 	for (;;) {
+		unsigned char c;
 		if (d->ip_limit - ip < 5) {
 			d->ip = ip;
 			if (!refill_tag(d))
@@ -1195,10 +1219,11 @@ static void decompress_all_tags(struct snappy_decompressor *d,
 			ip = d->ip;
 		}
 
-		const unsigned char c = *(const unsigned char *)(ip++);
+		c = *(unsigned char *)(ip++);
 
 		if ((c & 0x3) == LITERAL) {
 			u32 literal_length = (c >> 2) + 1;
+			u32 avail;
 			if (writer_try_fast_append(writer, ip, (u32) (d->ip_limit - ip), 
 						   literal_length)) {
 				DCHECK_LT(literal_length, 61);
@@ -1214,13 +1239,13 @@ static void decompress_all_tags(struct snappy_decompressor *d,
 				ip += literal_ll;
 			}
 
-			u32 avail = (u32) (d->ip_limit - ip);
+			avail = (u32) (d->ip_limit - ip);
 			while (avail < literal_length) {
+				size_t n;
 				if (!writer_append(writer, ip, avail))
 					return;
 				literal_length -= avail;
 				skip(d->reader, d->peeked);
-				size_t n;
 				ip = peek(d->reader, &n);
 				avail = (u32) n;
 				d->peeked = avail;
@@ -1237,6 +1262,7 @@ static void decompress_all_tags(struct snappy_decompressor *d,
 			const u32 trailer = get_unaligned_le32(ip) &
 				wordmask[entry >> 11];
 			const u32 length = entry & 0xff;
+			u32 copy_offset;
 			ip += entry >> 11;
 
 			/*
@@ -1245,7 +1271,7 @@ static void decompress_all_tags(struct snappy_decompressor *d,
 			 * copy_offset (since the bit-field starts at
 			 * bit 8).
 			 */
-			const u32 copy_offset = entry & 0x700;
+			copy_offset = entry & 0x700;
 			if (!writer_append_from_self(writer,
 						     copy_offset + trailer,
 						     length))
@@ -1260,6 +1286,10 @@ static void decompress_all_tags(struct snappy_decompressor *d,
 static bool refill_tag(struct snappy_decompressor *d)
 {
 	const char *ip = d->ip;
+	unsigned char c;
+	u32 entry;
+	u32 needed;
+	u32 nbuf;
 
 	if (ip == d->ip_limit) {
 		size_t n;
@@ -1276,13 +1306,13 @@ static bool refill_tag(struct snappy_decompressor *d)
 
 	/* Read the tag character */
 	DCHECK_LT(ip, d->ip_limit);
-	const unsigned char c = *(const unsigned char *)(ip);
-	const u32 entry = char_table[c];
-	const u32 needed = (entry >> 11) + 1;	/* +1 byte for 'c' */
+	c = *(const unsigned char *)(ip);
+	entry = char_table[c];
+	needed = (entry >> 11) + 1;	/* +1 byte for 'c' */
 	DCHECK_LE(needed, sizeof(d->scratch));
 
 	/* Read more bytes from reader if needed */
-	u32 nbuf = (u32) (d->ip_limit - ip);
+	nbuf = (u32) (d->ip_limit - ip);
 
 	if (nbuf < needed) {
 		/*
@@ -1296,10 +1326,11 @@ static bool refill_tag(struct snappy_decompressor *d)
 		d->peeked = 0;
 		while (nbuf < needed) {
 			size_t length;
+			u32 to_add;
 			const char *src = peek(d->reader, &length);
 			if (length == 0)
 				return false;
-			u32 to_add = min_t(u32, needed - nbuf, (u32) length);
+			to_add = min_t(u32, needed - nbuf, (u32) length);
 			memcpy(d->scratch + nbuf, src, to_add);
 			nbuf += to_add;
 			skip(d->reader, to_add);
@@ -1365,14 +1396,21 @@ static inline int sn_compress(struct snappy_env *env, struct source *reader,
 		/* Get next block to compress (without copying if possible) */
 		size_t fragment_size;
 		const char *fragment = peek(reader, &fragment_size);
+		unsigned num_to_read;
+		size_t bytes_read;
+		int pending_advance;
+		int table_size;
+		u16 *table;
+		char *dest;
+		char *end;
 		if (fragment_size == 0) {
 			err = -EIO;
 			goto out;
 		}
-		const unsigned num_to_read = min_t(int, N, kblock_size);
-		size_t bytes_read = fragment_size;
+		num_to_read = min_t(int, N, kblock_size);
+		bytes_read = fragment_size;
 
-		int pending_advance = 0;
+		pending_advance = 0;
 		if (bytes_read >= num_to_read) {
 			/* Buffer returned by reader is large enough */
 			pending_advance = num_to_read;
@@ -1383,8 +1421,9 @@ static inline int sn_compress(struct snappy_env *env, struct source *reader,
 			skip(reader, bytes_read);
 
 			while (bytes_read < num_to_read) {
+				size_t n;
 				fragment = peek(reader, &fragment_size);
-				size_t n =
+				n =
 				    min_t(size_t, fragment_size,
 					  num_to_read - bytes_read);
 				memcpy((char *)(env->scratch) + bytes_read, fragment, n);
@@ -1399,11 +1438,9 @@ static inline int sn_compress(struct snappy_env *env, struct source *reader,
 			return -EIO;
 
 		/* Get encoding table for compression */
-		int table_size;
-		u16 *table = get_hash_table(env, num_to_read, &table_size);
+		table = get_hash_table(env, num_to_read, &table_size);
 
 		/* Compress input_fragment and append to dest */
-		char *dest;
 		dest = sink_peek(writer, snappy_max_compressed_length(num_to_read));
 		if (!dest) {
 			/*
@@ -1413,7 +1450,7 @@ static inline int sn_compress(struct snappy_env *env, struct source *reader,
 			 */
 			dest = env->scratch_output;
 		}
-		char *end = compress_fragment(fragment, fragment_size,
+		end = compress_fragment(fragment, fragment_size,
 					      dest, table, table_size);
 		append(writer, dest, end - dest);
 		written += (end - dest);
@@ -1437,16 +1474,16 @@ int snappy_compress_iov(struct snappy_env *env,
 			int *iov_out_len,
 			size_t *compressed_length)
 {
-	struct source reader = {
-		.iov = iov_in,
-		.iovlen = iov_in_len,
-		.total = input_length
-	};
-	struct sink writer = {
-		.iov = iov_out,
-		.iovlen = *iov_out_len,
-	};
-	int err = sn_compress(env, &reader, &writer);
+	struct source reader;
+	struct sink writer;
+	int err;
+
+	reader.iov = iov_in;
+	reader.iovlen = iov_in_len;
+	reader.total = input_length;
+	writer.iov = iov_out;
+	writer.iovlen = *iov_out_len;
+	err = sn_compress(env, &reader, &writer);
 
 	*iov_out_len = writer.curvec + 1;
 
@@ -1478,15 +1515,13 @@ int snappy_compress(struct snappy_env *env,
 		    size_t input_length,
 		    char *compressed, size_t *compressed_length)
 {
-	struct iovec iov_in = {
-		.iov_base = (char *)input,
-		.iov_len = input_length,
-	};
-	struct iovec iov_out = {
-		.iov_base = compressed,
-		.iov_len = 0xffffffff,
-	};
+	struct iovec iov_in;
+	struct iovec iov_out;
 	int out = 1;
+	iov_in.iov_base = (char *)input;
+	iov_in.iov_len = input_length;
+	iov_out.iov_base = compressed;
+	iov_out.iov_len = 0xffffffff;
 	return snappy_compress_iov(env, 
 				   &iov_in, 1, input_length, 
 				   &iov_out, &out, compressed_length);
@@ -1496,15 +1531,13 @@ EXPORT_SYMBOL(snappy_compress);
 int snappy_uncompress_iov(struct iovec *iov_in, int iov_in_len,
 			   size_t input_len, char *uncompressed)
 {
-	struct source reader = {
-		.iov = iov_in,
-		.iovlen = iov_in_len,
-		.total = input_len
-	};
-	struct writer output = {
-		.base = uncompressed,
-		.op = uncompressed
-	};
+	struct source reader;
+	struct writer output;
+	reader.iov = iov_in;
+	reader.iovlen = iov_in_len;
+	reader.total = input_len;
+	output.base = uncompressed;
+	output.op = uncompressed;
 	return internal_uncompress(&reader, &output, 0xffffffff);
 }
 EXPORT_SYMBOL(snappy_uncompress_iov);
@@ -1522,10 +1555,9 @@ EXPORT_SYMBOL(snappy_uncompress_iov);
  */
 int snappy_uncompress(const char *compressed, size_t n, char *uncompressed)
 {
-	struct iovec iov = {
-		.iov_base = (char *)compressed,
-		.iov_len = n
-	};
+	struct iovec iov;
+	iov.iov_base = (char *)compressed;
+	iov.iov_len = n;
 	return snappy_uncompress_iov(&iov, 1, n, uncompressed);
 }
 EXPORT_SYMBOL(snappy_uncompress);
