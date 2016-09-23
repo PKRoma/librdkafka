@@ -51,10 +51,15 @@ void rd_kafka_q_init (rd_kafka_q_t *rkq, rd_kafka_t *rk) {
 /**
  * Allocate a new queue and initialize it.
  */
-rd_kafka_q_t *rd_kafka_q_new (rd_kafka_t *rk) {
+rd_kafka_q_t *rd_kafka_q_new0 (rd_kafka_t *rk, const char *func, int line) {
         rd_kafka_q_t *rkq = rd_malloc(sizeof(*rkq));
         rd_kafka_q_init(rkq, rk);
         rkq->rkq_flags |= RD_KAFKA_Q_F_ALLOCATED;
+#if ENABLE_DEVEL
+	rd_snprintf(rkq->rkq_name, sizeof(rkq->rkq_name), "%s:%d", func, line);
+#else
+	rkq->rkq_name = func;
+#endif
         return rkq;
 }
 
@@ -77,7 +82,6 @@ void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq,
 	}
 	if (destq) {
 		rd_kafka_q_keep(destq);
-		srcq->rkq_fwdq = destq;
 
 		/* If rkq has ops in queue, append them to fwdq's queue.
 		 * This is an irreversible operation. */
@@ -85,6 +89,8 @@ void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq,
 			rd_dassert(destq->rkq_flags & RD_KAFKA_Q_F_READY);
 			rd_kafka_q_concat(destq, srcq);
 		}
+
+		srcq->rkq_fwdq = destq;
 	}
         if (do_lock)
                 mtx_unlock(&srcq->rkq_lock);
@@ -517,7 +523,8 @@ rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
 
 	default:
 		rd_kafka_assert(NULL, !*"unhandled optype");
-		break;
+		RD_NOTREACHED();
+		return NULL;
 	}
 
 	return rd_kafka_message_setup(rko, rkmessage);

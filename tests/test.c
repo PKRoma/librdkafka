@@ -121,6 +121,7 @@ _TEST_DECL(0039_event);
 _TEST_DECL(0040_io_event);
 _TEST_DECL(0041_fetch_max_bytes);
 _TEST_DECL(0042_many_topics);
+_TEST_DECL(0043_no_connection);
 
 /**
  * Define all tests here
@@ -164,6 +165,7 @@ struct test tests[] = {
 	_TEST(0040_io_event, 0, TEST_BRKVER(0,9,0,0)),
 	_TEST(0041_fetch_max_bytes, 0),
 	_TEST(0042_many_topics, 0),
+	_TEST(0043_no_connection, TEST_F_LOCAL),
         { NULL }
 };
 
@@ -1135,6 +1137,11 @@ rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf) {
 	rd_kafka_t *rk;
 	char errstr[512];
 
+	if (!conf)
+		conf = rd_kafka_conf_new();
+
+	test_conf_set(conf, "client.id", test_curr->name);
+
 	/* Create kafka instance */
 	rk = rd_kafka_new(mode, conf, errstr, sizeof(errstr));
 	if (!rk)
@@ -1264,8 +1271,8 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 		if (!payload) {
 			test_msg_fmt(key, sizeof(key), testid, partition,
 				     msg_id);
-			len = strlen(key);
-			memcpy(buf, key, RD_MIN(size, len));
+			len = RD_MIN(size, strlen(key));
+			memcpy(buf, key, len);
 		}
 
 		if (rd_kafka_produce(rkt, partition,
@@ -1371,17 +1378,13 @@ rd_kafka_t *test_create_consumer (const char *group_id,
                                   rd_kafka_topic_conf_t *default_topic_conf,
 				  void *opaque) {
 	rd_kafka_t *rk;
-	char errstr[512];
 	char tmp[64];
 
 	if (!conf)
 		test_conf_init(&conf, NULL, 0);
 
         if (group_id) {
-                if (rd_kafka_conf_set(conf, "group.id", group_id,
-                                      errstr, sizeof(errstr)) !=
-                    RD_KAFKA_CONF_OK)
-                        TEST_FAIL("Conf failed: %s\n", errstr);
+		test_conf_set(conf, "group.id", group_id);
 
 		rd_snprintf(tmp, sizeof(tmp), "%d", test_session_timeout_ms);
 		test_conf_set(conf, "session.timeout.ms", tmp);
@@ -1398,14 +1401,10 @@ rd_kafka_t *test_create_consumer (const char *group_id,
                 rd_kafka_conf_set_default_topic_conf(conf, default_topic_conf);
 
 	/* Create kafka instance */
-	rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
-	if (!rk)
-		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
+	rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
 
 	if (group_id)
 		rd_kafka_poll_set_consumer(rk);
-
-	TEST_SAY("Created kafka instance %s\n", rd_kafka_name(rk));
 
 	return rk;
 }

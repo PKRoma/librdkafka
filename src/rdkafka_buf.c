@@ -103,8 +103,11 @@ struct iovec *rd_kafka_buf_iov_next (rd_kafka_buf_t *rkbuf) {
  * Pushes 'buf' & 'len' onto the previously allocated iov stack for 'rkbuf'.
  */
 void rd_kafka_buf_push0 (rd_kafka_buf_t *rkbuf, const void *buf, size_t len,
-			 int allow_crc_calc) {
+			 int allow_crc_calc, int auto_push) {
 	struct iovec *iov;
+
+	if (auto_push)
+		rd_kafka_buf_autopush(rkbuf);
 
 	iov = rd_kafka_buf_iov_next(rkbuf);
 
@@ -126,10 +129,11 @@ void rd_kafka_buf_push0 (rd_kafka_buf_t *rkbuf, const void *buf, size_t len,
  *   once and after all buf_write()s have been performed.
  */
 void rd_kafka_buf_autopush (rd_kafka_buf_t *rkbuf) {
-	rd_kafka_assert(NULL, rkbuf->rkbuf_wof > rkbuf->rkbuf_wof_init);
-        rd_kafka_buf_push0(rkbuf, rkbuf->rkbuf_wbuf + rkbuf->rkbuf_wof_init,
-			   rkbuf->rkbuf_wof - rkbuf->rkbuf_wof_init,
-			   0/* No CRC calc */);
+	if (rkbuf->rkbuf_wof > rkbuf->rkbuf_wof_init)
+		rd_kafka_buf_push0(rkbuf,
+				   rkbuf->rkbuf_wbuf + rkbuf->rkbuf_wof_init,
+				   rkbuf->rkbuf_wof - rkbuf->rkbuf_wof_init,
+				   0/* No CRC calc */, 0/* No autopush */);
 }
 
 
@@ -220,7 +224,7 @@ rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk,
 
         if (rk) {
                 /* save the first iovecs for the header + clientid */
-		rd_kafka_buf_push0(rkbuf, rkbuf->rkbuf_buf, headersize, 0);
+		rd_kafka_buf_push0(rkbuf, rkbuf->rkbuf_buf, headersize, 0, 0);
         }
 
 	rkbuf->rkbuf_size     = size;
@@ -308,20 +312,23 @@ void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
 
 
 /**
- * @brief Purge connection-setup API requests from the queue.
+ * @brief Update bufq for connection reset:
+ *
+ * - Purge connection-setup API requests from the queue.
+ * - Reset any partially sent buffer's offset. (issue #756)
  *
  * Request types purged:
  *   ApiVersion
  *   SaslHandshake
  */
-void rd_kafka_bufq_purge_connsetup (rd_kafka_broker_t *rkb,
-				    rd_kafka_bufq_t *rkbufq) {
+void rd_kafka_bufq_connection_reset (rd_kafka_broker_t *rkb,
+				     rd_kafka_bufq_t *rkbufq) {
 	rd_kafka_buf_t *rkbuf, *tmp;
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
-	rd_rkb_dbg(rkb, QUEUE, "BUFQ", "Purging connection-setup requests "
-		   "from bufq with %i buffers",
+	rd_rkb_dbg(rkb, QUEUE, "BUFQ",
+		   "Updating %d buffers on connection reset",
 		   rd_atomic32_get(&rkbufq->rkbq_cnt));
 
 	TAILQ_FOREACH_SAFE(rkbuf, &rkbufq->rkbq_bufs, rkbuf_link, tmp) {
@@ -335,13 +342,16 @@ void rd_kafka_bufq_purge_connsetup (rd_kafka_broker_t *rkb,
 					      NULL, rkbuf);
 			break;
 		default:
+			if (rkbuf->rkbuf_of > 0)
+				rkbuf->rkbuf_of = 0;
 			break;
 		}
         }
 }
 
 
-size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
+size_t rd_kafka_buf_write_Message (rd_kafka_broker_t *rkb,
+				   rd_kafka_buf_t *rkbuf,
 				   int64_t Offset, int8_t MagicByte,
 				   int8_t Attributes, int64_t Timestamp,
 				   const void *key, int32_t key_len,
@@ -385,26 +395,27 @@ size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 	/* V1: Timestamp */
 	if (MagicByte == 1)
 		rd_kafka_buf_write_i64(rkbuf, Timestamp);
-	
+
 	/* Message Key */
 	if (key) {
 		rd_kafka_buf_write_i32(rkbuf, key_len);
-		/* Push write-buffer onto iovec stack */
-		rd_kafka_buf_autopush(rkbuf);
-		rd_kafka_buf_push(rkbuf, key, key_len);
+		rd_kafka_buf_write(rkbuf, key, key_len);
 	} else {
 		rd_kafka_buf_write_i32(rkbuf, RD_KAFKAP_BYTES_LEN_NULL);
 	}
 
 	/* Value(payload) length */
-	rd_kafka_buf_write_i32(rkbuf, payload ? len : RD_KAFKAP_BYTES_LEN_NULL);
-
-	/* Push write-buffer onto iovec stack */
-        rd_kafka_buf_autopush(rkbuf);
-
-	/* Value */
-	if (payload)
-		rd_kafka_buf_push(rkbuf, payload, len);
+	if (payload) {
+		/* If payload is below the copy limit we copy the payload
+		 * to the buffer, otherwise we push it onto the iovec stack.*/
+		rd_kafka_buf_write_i32(rkbuf, len);
+		if (len <= rkb->rkb_rk->rk_conf.msg_copy_max_size)
+			rd_kafka_buf_write(rkbuf, payload, len);
+		else
+			rd_kafka_buf_push(rkbuf, payload, len);
+	} else {
+		rd_kafka_buf_write_i32(rkbuf, RD_KAFKAP_BYTES_LEN_NULL);
+	}
 
 	/* Finalize Crc */
 	rd_kafka_buf_update_u32(rkbuf, of_Crc,
