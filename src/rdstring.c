@@ -42,25 +42,25 @@
  * @returns number of written bytes to \p dest,
  *          or -1 on failure (errstr is written)
  */
-char *rd_string_render (const char *template,
+char *rd_string_render (const char *templ,
 			char *errstr, size_t errstr_size,
 			ssize_t (*callback) (const char *key,
 					     char *buf, size_t size,
 					     void *opaque),
 			 void *opaque) {
-	const char *s = template;
-	const char *tend = template + strlen(template);
+	const char *s = templ;
+	const char *tend = templ + strlen(templ);
 	size_t size = 256;
 	char *buf;
 	size_t of = 0;
 
-	buf = rd_malloc(size);
+	buf = (char *)rd_malloc(size);
 
 #define _remain() (size - of - 1)
 #define _assure_space(SZ) do {				\
 		if (of + (SZ) + 1 >= size) {		\
 			size = (size + (SZ) + 1) * 2;	\
-			buf = realloc(buf, size);	\
+			buf = (char *)realloc(buf, size);	\
 		}					\
 	} while (0)
 	
@@ -74,7 +74,7 @@ char *rd_string_render (const char *template,
 
 	while (*s) {
 		const char *t;
-		size_t tof = (size_t)(s-template);
+		size_t tof = (size_t)(s-templ);
 
 		t = strstr(s, "%{");
 		if (t != s) {

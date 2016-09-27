@@ -44,6 +44,9 @@
 #pragma once
 
 #include <stdio.h>
+#ifndef _MSC_VER
+#include <inttypes.h>
+#endif
 #include <sys/types.h>
 
 #ifdef __cplusplus

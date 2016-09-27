@@ -106,7 +106,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	"An application can either query this value or attempt to set it "
 	"with its list of required features to check for library support.",
 	0, 0x7fffffff, 0xff,
-	.s2i = {
+	"", NULL, {
 #if WITH_ZLIB
 		{ 0x1, "gzip" },
 #endif
@@ -130,14 +130,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	},
 	{ _RK_GLOBAL, "client.id", _RK_C_STR, _RK(client_id_str),
 	  "Client identifier.",
-	  .sdef =  "rdkafka" },
+	  0, 0, 0, "rdkafka" },
 	{ _RK_GLOBAL, "metadata.broker.list", _RK_C_STR, _RK(brokerlist),
 	  "Initial list of brokers. "
 	  "The application may also use `rd_kafka_brokers_add()` to add "
 	  "brokers during runtime." },
 	{ _RK_GLOBAL, "bootstrap.servers", _RK_C_ALIAS, 0,
 	  "See metadata.broker.list",
-	  .sdef = "metadata.broker.list" },
+	  0, 0, 0, "metadata.broker.list" },
 	{ _RK_GLOBAL, "message.max.bytes", _RK_C_INT, _RK(max_msg_size),
 	  "Maximum transmit message size.",
 	  1000, 1000000000, 1000000 },
@@ -193,7 +193,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "broker metadata information as if the topics did not exist." },
 	{ _RK_GLOBAL, "debug", _RK_C_S2F, _RK(debug),
 	  "A comma-separated list of debug contexts to enable.",
-	  .s2i = {
+	  0, 0, 0, "", NULL, {
                         { RD_KAFKA_DBG_GENERIC,  "generic" },
 			{ RD_KAFKA_DBG_BROKER,   "broker" },
 			{ RD_KAFKA_DBG_TOPIC,    "topic" },
@@ -242,8 +242,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL, "broker.address.family", _RK_C_S2I,
           _RK(broker_addr_family),
           "Allowed broker IP address families: any, v4, v6",
-          .vdef = AF_UNSPEC,
-          .s2i = {
+          0, 0, AF_UNSPEC,
+          "", NULL, {
                         { AF_UNSPEC, "any" },
                         { AF_INET, "v4" },
                         { AF_INET6, "v6" },
@@ -274,7 +274,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "log_cb", _RK_C_PTR,
 	  _RK(log_cb),
 	  "Log callback (set with rd_kafka_conf_set_log_cb())",
-          .pdef = rd_kafka_log_print },
+          0, 0, 0, "", rd_kafka_log_print },
         { _RK_GLOBAL, "log_level", _RK_C_INT,
           _RK(log_level),
           "Logging level (syslog(3) levels)",
@@ -293,7 +293,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL, "socket_cb", _RK_C_PTR,
           _RK(socket_cb),
           "Socket creation callback to provide race-free CLOEXEC",
-          .pdef =
+          0, 0, 0, "",
 #ifdef __linux__
           rd_kafka_socket_cb_linux
 #else
@@ -303,7 +303,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL, "open_cb", _RK_C_PTR,
           _RK(open_cb),
           "File open callback to provide race-free CLOEXEC",
-          .pdef =
+          0, 0, 0, "",
 #ifdef __linux__
           rd_kafka_open_cb_linux
 #else
@@ -353,15 +353,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "accordingly if the ApiVersionRequest fails (or is disabled). "
 	  "The fallback broker version will be used for `api.version.fallback.ms`. "
 	  "Valid values are: 0.9.0, 0.8.2, 0.8.1, 0.8.0.",
-	  .sdef = "0.9.0",
-	  .validate = rd_kafka_conf_validate_broker_version },
+	  0, 0, 0, "0.9.0",
+	  NULL, { { 0, NULL } }, rd_kafka_conf_validate_broker_version },
 
 	/* Security related global properties */
 	{ _RK_GLOBAL, "security.protocol", _RK_C_S2I,
 	  _RK(security_protocol),
 	  "Protocol used to communicate with brokers.",
-	  .vdef = RD_KAFKA_PROTO_PLAINTEXT,
-	  .s2i = {
+	  0, 0, RD_KAFKA_PROTO_PLAINTEXT,
+	  "", NULL, {
 			{ RD_KAFKA_PROTO_PLAINTEXT, "plaintext" },
 #if WITH_SSL
 			{ RD_KAFKA_PROTO_SSL, "ssl" },
@@ -461,7 +461,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(partition_assignment_strategy),
           "Name of partition assignment strategy to use when elected "
           "group leader assigns partitions to group members.",
-	  .sdef = "range,roundrobin" },
+	  0, 0, 0, "range,roundrobin" },
         { _RK_GLOBAL|_RK_CGRP, "session.timeout.ms", _RK_C_INT,
           _RK(group_session_timeout_ms),
           "Client group session and failure detection timeout.",
@@ -473,7 +473,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL|_RK_CGRP, "group.protocol.type", _RK_C_KSTR,
           _RK(group_protocol_type),
           "Group protocol type",
-          .sdef = "consumer" },
+          0, 0, 0, "consumer" },
         { _RK_GLOBAL|_RK_CGRP, "coordinator.query.interval.ms", _RK_C_INT,
           _RK(coord_query_intvl_ms),
           "How often to query for the current client group coordinator. "
@@ -522,7 +522,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "entire message can be fetched.",
           1, 1000000000, 1024*1024 },
 	{ _RK_GLOBAL|_RK_CONSUMER, "max.partition.fetch.bytes", _RK_C_ALIAS,
-	  .sdef = "fetch.message.max.bytes" },
+	  0, "", 0, 0, 0, "fetch.message.max.bytes" },
 	{ _RK_GLOBAL|_RK_CONSUMER, "fetch.min.bytes", _RK_C_INT,
 	  _RK(fetch_min_bytes),
 	  "Minimum number of bytes the broker responds with. "
@@ -540,8 +540,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "'file' - local file store (offset.store.path, et.al), "
           "'broker' - broker commit store "
           "(requires Apache Kafka 0.8.2 or later on the broker).",
-          .vdef = RD_KAFKA_OFFSET_METHOD_BROKER,
-          .s2i = {
+          0, 0, RD_KAFKA_OFFSET_METHOD_BROKER,
+          "", NULL, {
                         { RD_KAFKA_OFFSET_METHOD_NONE, "none" },
                         { RD_KAFKA_OFFSET_METHOD_FILE, "file" },
                         { RD_KAFKA_OFFSET_METHOD_BROKER, "broker" }
@@ -584,7 +584,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "**Note:** retrying may cause reordering.",
           0, 10000000, 2 },
           { _RK_GLOBAL | _RK_PRODUCER, "retries", _RK_C_ALIAS,
-                .sdef = "message.send.max.retries" },
+                0, "", 0, 0, 0, "message.send.max.retries" },
 	{ _RK_GLOBAL|_RK_PRODUCER, "retry.backoff.ms", _RK_C_INT,
 	  _RK(retry_backoff_ms),
 	  "The backoff time in milliseconds before retrying a message send.",
@@ -594,8 +594,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "compression codec to use for compressing message sets. "
 	  "This is the default value for all topics, may be overriden by "
 	  "the topic configuration property `compression.codec`. ",
-	  .vdef = RD_KAFKA_COMPRESSION_NONE,
-	  .s2i = {
+	  0, 0, RD_KAFKA_COMPRESSION_NONE,
+	  "", NULL, {
 			{ RD_KAFKA_COMPRESSION_NONE,   "none" },
 #if WITH_ZLIB
 			{ RD_KAFKA_COMPRESSION_GZIP,   "gzip" },
@@ -640,12 +640,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "in sync replicas (ISRs) or broker's `in.sync.replicas` "
 	  "setting before sending response. ",
 	  -1, 1000, 1,
-	  .s2i = {
+	  "", NULL, {
 			{ -1, "all" },
 		}
 	},
 	{ _RK_TOPIC | _RK_PRODUCER, "acks", _RK_C_ALIAS,
-	  .sdef = "request.required.acks" },
+	  0, "", 0, 0, 0, "request.required.acks" },
 
 	{ _RK_TOPIC|_RK_PRODUCER, "request.timeout.ms", _RK_C_INT,
 	  _RKT(request_timeout_ms),
@@ -676,8 +676,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_TOPIC | _RK_PRODUCER, "compression.codec", _RK_C_S2I,
 	  _RKT(compression_codec),
 	  "Compression codec to use for compressing message sets. ",
-	  .vdef = RD_KAFKA_COMPRESSION_INHERIT,
-	  .s2i = {
+	  0, 0, RD_KAFKA_COMPRESSION_INHERIT,
+	  "", NULL, {
 		  { RD_KAFKA_COMPRESSION_NONE, "none" },
 #if WITH_ZLIB
 		  { RD_KAFKA_COMPRESSION_GZIP, "gzip" },
@@ -710,7 +710,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "offset.store.method.",
 	  0, 1, 1 },
 	{ _RK_TOPIC|_RK_CONSUMER, "enable.auto.commit", _RK_C_ALIAS,
-	  .sdef = "auto.commit.enable" },
+	  0, "", 0, 0, 0, "auto.commit.enable" },
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
 	  _RKT(auto_commit_interval_ms),
 	  "The frequency in milliseconds that the consumer offsets "
@@ -724,8 +724,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "'largest','latest' - automatically reset the offset to the largest offset, "
 	  "'error' - trigger an error which is retrieved by consuming messages "
 	  "and checking 'message->err'.",
-	  .vdef = RD_KAFKA_OFFSET_END,
-	  .s2i = {
+	  0, 0, RD_KAFKA_OFFSET_END,
+	  "", NULL, {
 			{ RD_KAFKA_OFFSET_BEGINNING, "smallest" },
 			{ RD_KAFKA_OFFSET_BEGINNING, "earliest" },
 			{ RD_KAFKA_OFFSET_BEGINNING, "beginning" },
@@ -740,7 +740,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Path to local file for storing offsets. If the path is a directory "
 	  "a filename will be automatically generated in that directory based "
 	  "on the topic and partition.",
-	  .sdef = "." },
+	  0, 0, 0, "." },
 
 	{ _RK_TOPIC|_RK_CONSUMER, "offset.store.sync.interval.ms", _RK_C_INT,
 	  _RKT(offset_store_sync_interval_ms),
@@ -756,8 +756,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "'broker' - broker commit store "
           "(requires \"group.id\" to be configured and "
 	  "Apache Kafka 0.8.2 or later on the broker.).",
-          .vdef = RD_KAFKA_OFFSET_METHOD_BROKER, /* FIXME: warn about default change */
-          .s2i = {
+          0, 0, RD_KAFKA_OFFSET_METHOD_BROKER, /* FIXME: warn about default change */
+          "", NULL, {
                         { RD_KAFKA_OFFSET_METHOD_FILE, "file" },
                         { RD_KAFKA_OFFSET_METHOD_BROKER, "broker" }
                 }

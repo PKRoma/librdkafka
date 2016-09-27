@@ -87,23 +87,25 @@ struct rd_kafkap_reshdr {
 static RD_UNUSED
 const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 	static const char *names[] = {
-		"Produce", //[RD_KAFKAP_Produce] = "Produce",
-		"Fetch", //[RD_KAFKAP_Fetch] = "Fetch",
-		"Offset", //[RD_KAFKAP_Offset] = "Offset",
-		"Metadata", //[RD_KAFKAP_Metadata] = "Metadata",
-		"LeaderAndIsr", //[RD_KAFKAP_LeaderAndIsr] = "LeaderAndIsr",
-		"StopReplica", //[RD_KAFKAP_StopReplica] = "StopReplica",
-		"OffsetCommit", //[RD_KAFKAP_OffsetCommit] = "OffsetCommit",
-		"OffsetFetch", //[RD_KAFKAP_OffsetFetch] = "OffsetFetch",
-		"GroupCoordinator", //[RD_KAFKAP_GroupCoordinator] = "GroupCoordinator",
-                "JoinGroup", //[RD_KAFKAP_JoinGroup] = "JoinGroup",
-                "Heartbeat", //[RD_KAFKAP_Heartbeat] = "Heartbeat",
-                "LeaveGroup", //[RD_KAFKAP_LeaveGroup] = "LeaveGroup",
-                "SyncGroup", //[RD_KAFKAP_SyncGroup] = "SyncGroup",
-		"DescribeGroups", //[RD_KAFKAP_DescribeGroups] = "DescribeGroups",
-		"ListGroups", //[RD_KAFKAP_ListGroups] = "ListGroups",
-		"SaslHandshake", //[RD_KAFKAP_SaslHandshake] = "SaslHandshake",
-		"ApiVersion" //[RD_KAFKAP_ApiVersion] = "ApiVersion"
+		/*[RD_KAFKAP_Produce] = */ "Produce",
+		/*[RD_KAFKAP_Fetch] =*/ "Fetch",
+		/*[RD_KAFKAP_Offset] =*/ "Offset",
+		/*[RD_KAFKAP_Metadata] =*/ "Metadata",
+		/*[RD_KAFKAP_LeaderAndIsr] =*/ "LeaderAndIsr",
+		/*[RD_KAFKAP_StopReplica] =*/ "StopReplica",
+		"",
+		"",
+		/*[RD_KAFKAP_OffsetCommit] =*/ "OffsetCommit",
+		/*[RD_KAFKAP_OffsetFetch] =*/ "OffsetFetch",
+		/*[RD_KAFKAP_GroupCoordinator] =*/"GroupCoordinator",
+                /*[RD_KAFKAP_JoinGroup] =*/ "JoinGroup",
+                /*[RD_KAFKAP_Heartbeat] =*/ "Heartbeat",
+                /*[RD_KAFKAP_LeaveGroup] =*/ "LeaveGroup",
+                /*[RD_KAFKAP_SyncGroup] =*/ "SyncGroup",
+		/*[RD_KAFKAP_DescribeGroups] =*/ "DescribeGroups",
+		/*[RD_KAFKAP_ListGroups] =*/ "ListGroups",
+		/*[RD_KAFKAP_SaslHandshake] =*/ "SaslHandshake",
+		/*[RD_KAFKAP_ApiVersion] =*/ "ApiVersion"
 
 	};
 	static RD_TLS char ret[32];
@@ -297,7 +299,7 @@ typedef struct rd_kafkap_bytes_s {
 	int32_t     len;   /* Kafka bytes length (-1=NULL, 0=empty, >0=data) */
 	const void *data;  /* points just past the struct, or other memory,
 			    * not NULL-terminated */
-	char        _data[]; /* Bytes following struct when new()ed */
+	char       _data[]; /* Bytes following struct when new()ed */
 } rd_kafkap_bytes_t;
 
 

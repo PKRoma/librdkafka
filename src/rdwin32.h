@@ -36,6 +36,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <assert.h>
+#include <malloc.h>
 #define WIN32_MEAN_AND_LEAN
 #include <Winsock2.h>  /* for struct timeval */
 typedef short int16_t;
@@ -56,6 +57,7 @@ typedef unsigned long long uint64_t;
 #define InterlockedDecrement _InterlockedDecrement
 #define InterlockedExchangeAdd _InterlockedExchangeAdd
 #define InterlockedAdd _InterlockedExchangeAdd
+#define strtoull _strtoui64
 
 
 /**

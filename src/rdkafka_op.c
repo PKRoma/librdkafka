@@ -145,38 +145,39 @@ void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
 rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 	rd_kafka_op_t *rko;
 	static const size_t op2size[RD_KAFKA_OP__END] = {
-		sizeof(rko->rko_u.fetch), //[RD_KAFKA_OP_FETCH] = sizeof(rko->rko_u.fetch),
-		sizeof(rko->rko_u.err), //[RD_KAFKA_OP_ERR] = sizeof(rko->rko_u.err),
-		sizeof(rko->rko_u.err), //[RD_KAFKA_OP_CONSUMER_ERR] = sizeof(rko->rko_u.err),
-		sizeof(rko->rko_u.dr), //[RD_KAFKA_OP_DR] = sizeof(rko->rko_u.dr),
-		sizeof(rko->rko_u.stats), //[RD_KAFKA_OP_STATS] = sizeof(rko->rko_u.stats),
-		sizeof(rko->rko_u.metadata), //[RD_KAFKA_OP_METADATA_REQ] = sizeof(rko->rko_u.metadata),
-		sizeof(rko->rko_u.offset_commit), //[RD_KAFKA_OP_OFFSET_COMMIT] = sizeof(rko->rko_u.offset_commit),
-		sizeof(rko->rko_u.node), //[RD_KAFKA_OP_NODE_UPDATE] = sizeof(rko->rko_u.node),
-		sizeof(rko->rko_u.xbuf), //[RD_KAFKA_OP_XMIT_BUF] = sizeof(rko->rko_u.xbuf),
-		sizeof(rko->rko_u.xbuf), //[RD_KAFKA_OP_RECV_BUF] = sizeof(rko->rko_u.xbuf),
-		sizeof(rko->rko_u.xbuf), //[RD_KAFKA_OP_XMIT_RETRY] = sizeof(rko->rko_u.xbuf),
-		sizeof(rko->rko_u.fetch_start), //[RD_KAFKA_OP_FETCH_START] = sizeof(rko->rko_u.fetch_start),
-		0, //[RD_KAFKA_OP_FETCH_STOP] = 0,
-		sizeof(rko->rko_u.fetch_start), //[RD_KAFKA_OP_SEEK] = sizeof(rko->rko_u.fetch_start),
-		sizeof(rko->rko_u.pause), //[RD_KAFKA_OP_PAUSE] = sizeof(rko->rko_u.pause),
-		sizeof(rko->rko_u.offset_fetch), //[RD_KAFKA_OP_OFFSET_FETCH] = sizeof(rko->rko_u.offset_fetch),
-		0, //[RD_KAFKA_OP_PARTITION_JOIN] = 0,
-		0, //[RD_KAFKA_OP_PARTITION_LEAVE] = 0,
-		sizeof(rko->rko_u.rebalance), //[RD_KAFKA_OP_REBALANCE] = sizeof(rko->rko_u.rebalance),
-		0, //[RD_KAFKA_OP_TERMINATE] = 0,
-		0, //[RD_KAFKA_OP_COORD_QUERY] = 0,
-		sizeof(rko->rko_u.subscribe), //[RD_KAFKA_OP_SUBSCRIBE] = sizeof(rko->rko_u.subscribe),
-		sizeof(rko->rko_u.assign), //[RD_KAFKA_OP_ASSIGN] = sizeof(rko->rko_u.assign),
-		sizeof(rko->rko_u.subscribe), //[RD_KAFKA_OP_GET_SUBSCRIPTION] = sizeof(rko->rko_u.subscribe),
-		sizeof(rko->rko_u.assign), //[RD_KAFKA_OP_GET_ASSIGNMENT] = sizeof(rko->rko_u.assign),
-		sizeof(rko->rko_u.throttle), //[RD_KAFKA_OP_THROTTLE] = sizeof(rko->rko_u.throttle),
-		sizeof(rko->rko_u.name), //[RD_KAFKA_OP_NAME] = sizeof(rko->rko_u.name),
-		sizeof(rko->rko_u.offset_reset), //[RD_KAFKA_OP_OFFSET_RESET] = sizeof(rko->rko_u.offset_reset),
+		0,
+		/*[RD_KAFKA_OP_FETCH] =*/ sizeof(rko->rko_u.fetch),
+		/*[RD_KAFKA_OP_ERR] =*/ sizeof(rko->rko_u.err),
+		/*[RD_KAFKA_OP_CONSUMER_ERR] =*/ sizeof(rko->rko_u.err),
+		/*[RD_KAFKA_OP_DR] =*/ sizeof(rko->rko_u.dr),
+		/*[RD_KAFKA_OP_STATS] =*/ sizeof(rko->rko_u.stats),
+		/*[RD_KAFKA_OP_METADATA_REQ] =*/ sizeof(rko->rko_u.metadata),
+		/*[RD_KAFKA_OP_OFFSET_COMMIT] =*/ sizeof(rko->rko_u.offset_commit),
+		/*[RD_KAFKA_OP_NODE_UPDATE] =*/ sizeof(rko->rko_u.node),
+		/*[RD_KAFKA_OP_XMIT_BUF] =*/ sizeof(rko->rko_u.xbuf),
+		/*[RD_KAFKA_OP_RECV_BUF] =*/ sizeof(rko->rko_u.xbuf),
+		/*[RD_KAFKA_OP_XMIT_RETRY] =*/ sizeof(rko->rko_u.xbuf),
+		/*[RD_KAFKA_OP_FETCH_START] =*/ sizeof(rko->rko_u.fetch_start),
+		/*[RD_KAFKA_OP_FETCH_STOP] =*/ 0,
+		/*[RD_KAFKA_OP_SEEK] =*/ sizeof(rko->rko_u.fetch_start),
+		/*[RD_KAFKA_OP_PAUSE] =*/ sizeof(rko->rko_u.pause),
+		/*[RD_KAFKA_OP_OFFSET_FETCH] =*/ sizeof(rko->rko_u.offset_fetch),
+		/*[RD_KAFKA_OP_PARTITION_JOIN] =*/ 0,
+		/*[RD_KAFKA_OP_PARTITION_LEAVE] =*/ 0,
+		/*[RD_KAFKA_OP_REBALANCE] =*/ sizeof(rko->rko_u.rebalance),
+		/*[RD_KAFKA_OP_TERMINATE] =*/ 0,
+		/*[RD_KAFKA_OP_COORD_QUERY] =*/ 0,
+		/*[RD_KAFKA_OP_SUBSCRIBE] =*/ sizeof(rko->rko_u.subscribe),
+		/*[RD_KAFKA_OP_ASSIGN] =*/ sizeof(rko->rko_u.assign),
+		/*[RD_KAFKA_OP_GET_SUBSCRIPTION] =*/ sizeof(rko->rko_u.subscribe),
+		/*[RD_KAFKA_OP_GET_ASSIGNMENT] =*/ sizeof(rko->rko_u.assign),
+		/*[RD_KAFKA_OP_THROTTLE] =*/ sizeof(rko->rko_u.throttle),
+		/*[RD_KAFKA_OP_NAME] =*/ sizeof(rko->rko_u.name),
+		/*[RD_KAFKA_OP_OFFSET_RESET] =*/ sizeof(rko->rko_u.offset_reset),
 	};
 	size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
-	rko = rd_calloc(1, sizeof(*rko)-sizeof(rko->rko_u)+tsize);
+	rko = (rd_kafka_op_t *)rd_calloc(1, sizeof(*rko)-sizeof(rko->rko_u)+tsize);
 	rko->rko_type = type;
 
         rd_atomic32_add(&rd_kafka_op_cnt, 1);
@@ -340,9 +341,9 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
 				      rd_kafka_resp_err_t err) {
         rd_kafka_op_t *rko;
 
-        rko = rd_kafka_op_new(rko_orig->rko_type |
+        rko = rd_kafka_op_new((rd_kafka_op_type_t)(rko_orig->rko_type |
 			      (rko_orig->rko_op_cb ?
-			       RD_KAFKA_OP_CB : RD_KAFKA_OP_REPLY));
+			       RD_KAFKA_OP_CB : RD_KAFKA_OP_REPLY)));
 	rd_kafka_op_get_reply_version(rko, rko_orig);
 	rko->rko_op_cb   = rko_orig->rko_op_cb;
 	rko->rko_err     = err;

@@ -482,9 +482,9 @@ int tss_set(tss_t key, void *val);
 * FIXME: description */
 #if defined(_TTHREAD_WIN32_)
 typedef struct rwlock_t {
-	SRWLOCK		    lock;
-	volatile long   rcnt;
-	volatile long   wcnt;
+	SRWLOCK  lock;
+	int       rcnt;
+	int       wcnt;
 } rwlock_t;
 #define rwlock_init(rwl)    do { (rwl)->rcnt = (rwl)->wcnt = 0; InitializeSRWLock(&(rwl)->lock); } while (0)
 #define rwlock_destroy(rwl)

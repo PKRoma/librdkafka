@@ -66,8 +66,8 @@ static const struct rd_kafka_feature_map {
 
 		/* @brief >=0.10.0: Message.MagicByte version 1:
 		 * Relative offsets (KIP-31) and message timestamps (KIP-32). */
-		.feature = RD_KAFKA_FEATURE_MSGVER1,
-		.depends = {
+		RD_KAFKA_FEATURE_MSGVER1,
+		{
 			{ RD_KAFKAP_Produce, 2, 2 },
 			{ RD_KAFKAP_Fetch, 2, 2 },
 			{ -1 },
@@ -79,24 +79,24 @@ static const struct rd_kafka_feature_map {
 		 * @remark This is a bit of chicken-and-egg problem but needs to be
 		 *         set by feature_check() to avoid the feature being cleared
 		 *         even when broker supports it. */
-		.feature = RD_KAFKA_FEATURE_APIVERSION,
-		.depends = {
+		RD_KAFKA_FEATURE_APIVERSION,
+		{
 			{ RD_KAFKAP_ApiVersion, 0, 0 },
 			{ -1 },
 		},
 	},
 	{
 		/* @brief >=0.8.2.0: Broker-based Group coordinator */
-		.feature = RD_KAFKA_FEATURE_BROKER_GROUP_COORD,
-		.depends = {
+		RD_KAFKA_FEATURE_BROKER_GROUP_COORD,
+		{
 			{ RD_KAFKAP_GroupCoordinator, 0, 0 },
 			{ -1 },
 		},
 	},
 	{
 		/* @brief >=0.9.0: Broker-based balanced consumer groups. */
-		.feature = RD_KAFKA_FEATURE_BROKER_BALANCED_CONSUMER,
-		.depends = {
+		RD_KAFKA_FEATURE_BROKER_BALANCED_CONSUMER,
+		{
 			{ RD_KAFKAP_GroupCoordinator, 0, 0 },
 			{ RD_KAFKAP_OffsetCommit, 1, 2 },
 			{ RD_KAFKAP_OffsetFetch, 1, 1 },
@@ -109,8 +109,8 @@ static const struct rd_kafka_feature_map {
 	},
 	{
 		/* @brief >=0.9.0: ThrottleTime */
-		.feature = RD_KAFKA_FEATURE_THROTTLETIME,
-		.depends = {
+		RD_KAFKA_FEATURE_THROTTLETIME,
+		{
 			{ RD_KAFKAP_Produce, 1, 2 },
 			{ RD_KAFKAP_Fetch, 1, 2 },
 			{ -1 },
@@ -123,16 +123,16 @@ static const struct rd_kafka_feature_map {
 		 * we must use something else to map us to the
 		 * proper broker version support:
 		 * JoinGroup was released along with SASL in 0.9.0. */
-		.feature = RD_KAFKA_FEATURE_SASL,
-		.depends = {
+		RD_KAFKA_FEATURE_SASL,
+		{
 			{ RD_KAFKAP_JoinGroup, 0, 0 },
 			{ -1 },
 		},
 	},
 	{
 		/* @brief >=0.10.0: SASL mechanism handshake (KIP-43) */
-		.feature = RD_KAFKA_FEATURE_SASL_HANDSHAKE,
-		.depends = {
+		RD_KAFKA_FEATURE_SASL_HANDSHAKE,
+		{
 			{ RD_KAFKAP_SaslHandshake, 0, 0 },
 			{ -1 },
 		},
@@ -144,14 +144,14 @@ static const struct rd_kafka_feature_map {
 		 * we must use something else to map us to the
 		 * proper broker version support:
 		 * GrooupCoordinator was released in 0.8.2 */
-		.feature = RD_KAFKA_FEATURE_LZ4,
-		.depends = {
+		RD_KAFKA_FEATURE_LZ4,
+		{
 			{ RD_KAFKAP_GroupCoordinator, 0, 0 },
 			{ -1 },
 		},
 	},
 
-	{ .feature = 0 }, /* sentinel */
+	{ 0 }, /* sentinel */
 };
 
 
@@ -300,7 +300,7 @@ rd_kafka_ApiVersion_check (const struct rd_kafka_ApiVersion *apis, size_t api_cn
 			   const struct rd_kafka_ApiVersion *match) {
 	const struct rd_kafka_ApiVersion *api;
 
-	api = bsearch(match, apis, api_cnt, sizeof(*apis),
+	api = (const struct rd_kafka_ApiVersion *)bsearch(match, apis, api_cnt, sizeof(*apis),
 		      rd_kafka_ApiVersion_key_cmp);
 	if (unlikely(!api))
 		return 0;
@@ -378,7 +378,7 @@ int rd_kafka_features_check (rd_kafka_broker_t *rkb,
  */
 void rd_kafka_ApiVersions_copy (const struct rd_kafka_ApiVersion *src, size_t src_cnt,
 				struct rd_kafka_ApiVersion **dstp, size_t *dst_cntp) {
-	*dstp = rd_memdup(src, sizeof(*src) * src_cnt);
+	*dstp = (struct rd_kafka_ApiVersion *)rd_memdup(src, sizeof(*src) * src_cnt);
 	*dst_cntp = src_cnt;
 }
 

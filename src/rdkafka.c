@@ -202,14 +202,16 @@ void rd_kafka_set_log_level (rd_kafka_t *rk, int level) {
 
 static const char *rd_kafka_type2str (rd_kafka_type_t type) {
 	static const char *types[] = {
-		"producer", //[RD_KAFKA_PRODUCER] = "producer",
-		"consumer", //[RD_KAFKA_CONSUMER] = "consumer",
+		"producer",
+		"consumer",
 	};
 	return types[type];
 }
 
 #define _ERR_DESC(ENUM,DESC) \
-	{ ENUM, # ENUM + 18/*pfx*/, DESC } //[ENUM - RD_KAFKA_RESP_ERR__BEGIN] = { ENUM, # ENUM + 18/*pfx*/, DESC }
+	{ ENUM, # ENUM + 18/*pfx*/, DESC }
+#define _ED(ENUM) \
+	_ERR_DESC((rd_kafka_resp_err_t)ENUM, "")
 
 static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 	_ERR_DESC(RD_KAFKA_RESP_ERR__BEGIN, NULL),
@@ -279,6 +281,25 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 		  "Local: No offset stored"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR__OUTDATED,
 		  "Local: Outdated"),
+
+	_ED(-166), _ED(-165), _ED(-164), _ED(-163), _ED(-162), _ED(-161),
+	_ED(-160), _ED(-159), _ED(-158), _ED(-157), _ED(-156), _ED(-155), _ED(-154), _ED(-153), _ED(-152), _ED(-151),
+	_ED(-150), _ED(-149), _ED(-148), _ED(-147), _ED(-146), _ED(-145), _ED(-144), _ED(-143), _ED(-142), _ED(-141),
+	_ED(-140), _ED(-129), _ED(-138), _ED(-137), _ED(-136), _ED(-135), _ED(-134), _ED(-133), _ED(-132), _ED(-131),
+	_ED(-130), _ED(-129), _ED(-128), _ED(-127), _ED(-126), _ED(-125), _ED(-124), _ED(-123), _ED(-122), _ED(-121),
+	_ED(-120), _ED(-119), _ED(-118), _ED(-117), _ED(-116), _ED(-115), _ED(-114), _ED(-113), _ED(-112), _ED(-111),
+	_ED(-110), _ED(-109), _ED(-108), _ED(-107), _ED(-106), _ED(-105), _ED(-104), _ED(-103), _ED(-102), _ED(-101),
+	_ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL),
+	_ED(-99), _ED(-98), _ED(-97), _ED(-96), _ED(-95), _ED(-94), _ED(-93), _ED(-92), _ED(-91),
+	_ED(-90), _ED(-89), _ED(-88), _ED(-87), _ED(-86), _ED(-85), _ED(-84), _ED(-83), _ED(-82), _ED(-81),
+	_ED(-80), _ED(-79), _ED(-78), _ED(-77), _ED(-76), _ED(-75), _ED(-74), _ED(-73), _ED(-72), _ED(-71),
+	_ED(-70), _ED(-69), _ED(-68), _ED(-67), _ED(-66), _ED(-65), _ED(-64), _ED(-63), _ED(-62), _ED(-61),
+	_ED(-60), _ED(-59), _ED(-58), _ED(-57), _ED(-56), _ED(-55), _ED(-54), _ED(-53), _ED(-52), _ED(-51),
+	_ED(-50), _ED(-49), _ED(-48), _ED(-47), _ED(-46), _ED(-45), _ED(-44), _ED(-43), _ED(-42), _ED(-41),
+	_ED(-40), _ED(-39), _ED(-38), _ED(-37), _ED(-36), _ED(-35), _ED(-34), _ED(-33), _ED(-32), _ED(-31),
+	_ED(-30), _ED(-29), _ED(-28), _ED(-27), _ED(-26), _ED(-25), _ED(-24), _ED(-23), _ED(-22), _ED(-21),
+	_ED(-20), _ED(-19), _ED(-18), _ED(-17), _ED(-16), _ED(-15), _ED(-14), _ED(-13), _ED(-12), _ED(-11),
+	_ED(-10), _ED(-9), _ED(-8), _ED(-7), _ED(-6), _ED(-5), _ED(-4), _ED(-3), _ED(-2),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -357,7 +378,7 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION,
 		  "Broker: API version not supported"),
 
-	_ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)
+	_ERR_DESC(RD_KAFKA_RESP_ERR_END_ALL, NULL)
 };
 
 
@@ -596,7 +617,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 
 
         /* Join broker threads */
-          RD_LIST_FOREACH(thrd, &wait_thrds, i, thrd_t) {
+        RD_LIST_FOREACH(thrd, &wait_thrds, i, thrd_t) {
                 if (thrd_join(*thrd, NULL) != thrd_success)
                         ;
                 free(thrd);
@@ -1576,9 +1597,7 @@ static int rd_kafka_consume_callback0 (rd_kafka_q_t *rkq,
 							   *rkmessage,
 							   void *opaque),
 				       void *opaque) {
-	struct consume_ctx ctx;
-	ctx.consume_cb = consume_cb;
-	ctx.opaque = opaque;
+	struct consume_ctx ctx = { consume_cb, opaque };
 	return rd_kafka_q_serve(rkq, timeout_ms, max_cnt,
                                 _Q_CB_CONSUMER, rd_kafka_consume_cb, &ctx);
 
@@ -2085,10 +2104,9 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 		if (!rk->rk_conf.consume_cb)
 			return 0; /* Dont handle here */
 		{
-			struct consume_ctx ctx;
-
-			ctx.consume_cb = rk->rk_conf.consume_cb;
-			ctx.opaque = rk->rk_conf.opaque;
+			struct consume_ctx ctx = {
+				rk->rk_conf.consume_cb,
+				rk->rk_conf.opaque };
 
 			rd_kafka_consume_cb(rk, rko, _Q_CB_CONSUMER, &ctx);
 		}

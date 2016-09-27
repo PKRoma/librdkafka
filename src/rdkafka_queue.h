@@ -377,15 +377,13 @@ uint64_t rd_kafka_q_size (rd_kafka_q_t *rkq) {
 #else
 static RD_INLINE RD_UNUSED rd_kafka_replyq_t
 RD_KAFKA_REPLYQ(rd_kafka_q_t *Q, int32_t VERSION) {
-	rd_kafka_replyq_t replyq;
-	replyq.q = rd_kafka_q_keep(Q);
-	replyq.version = VERSION;
+	rd_kafka_replyq_t replyq = {rd_kafka_q_keep(Q), VERSION};
 	return replyq;
 }
 #endif
 
 /* Construct temporary on-stack replyq for indicating no replyq. */
-#define RD_KAFKA_NO_REPLYQ RD_KAFKA_REPLYQ(NULL, 0)
+#define RD_KAFKA_NO_REPLYQ  RD_KAFKA_REPLYQ(NULL, 0)
 
 /**
  * Set up replyq.

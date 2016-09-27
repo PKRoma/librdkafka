@@ -1474,16 +1474,16 @@ int snappy_compress_iov(struct snappy_env *env,
 			int *iov_out_len,
 			size_t *compressed_length)
 {
-	struct source reader;
-	struct sink writer;
-	int err;
-
-	reader.iov = iov_in;
-	reader.iovlen = iov_in_len;
-	reader.total = input_length;
-	writer.iov = iov_out;
-	writer.iovlen = *iov_out_len;
-	err = sn_compress(env, &reader, &writer);
+	struct source reader = {
+		iov_in,
+		iov_in_len,
+		0, 0, input_length
+	};
+	struct sink writer = {
+		iov_out,
+		*iov_out_len,
+	};
+	int err = sn_compress(env, &reader, &writer);
 
 	*iov_out_len = writer.curvec + 1;
 
@@ -1515,13 +1515,15 @@ int snappy_compress(struct snappy_env *env,
 		    size_t input_length,
 		    char *compressed, size_t *compressed_length)
 {
-	struct iovec iov_in;
-	struct iovec iov_out;
+	struct iovec iov_in = {
+		(char *)input,
+		input_length,
+	};
+	struct iovec iov_out = {
+		compressed,
+		0xffffffff,
+	};
 	int out = 1;
-	iov_in.iov_base = (char *)input;
-	iov_in.iov_len = input_length;
-	iov_out.iov_base = compressed;
-	iov_out.iov_len = 0xffffffff;
 	return snappy_compress_iov(env, 
 				   &iov_in, 1, input_length, 
 				   &iov_out, &out, compressed_length);
@@ -1531,13 +1533,15 @@ EXPORT_SYMBOL(snappy_compress);
 int snappy_uncompress_iov(struct iovec *iov_in, int iov_in_len,
 			   size_t input_len, char *uncompressed)
 {
-	struct source reader;
-	struct writer output;
-	reader.iov = iov_in;
-	reader.iovlen = iov_in_len;
-	reader.total = input_len;
-	output.base = uncompressed;
-	output.op = uncompressed;
+	struct source reader = {
+		iov_in,
+		iov_in_len,
+		0, 0, input_len
+	};
+	struct writer output = {
+		uncompressed,
+		uncompressed
+	};
 	return internal_uncompress(&reader, &output, 0xffffffff);
 }
 EXPORT_SYMBOL(snappy_uncompress_iov);
@@ -1555,9 +1559,10 @@ EXPORT_SYMBOL(snappy_uncompress_iov);
  */
 int snappy_uncompress(const char *compressed, size_t n, char *uncompressed)
 {
-	struct iovec iov;
-	iov.iov_base = (char *)compressed;
-	iov.iov_len = n;
+	struct iovec iov = {
+		(char *)compressed,
+		n
+	};
 	return snappy_uncompress_iov(&iov, 1, n, uncompressed);
 }
 EXPORT_SYMBOL(snappy_uncompress);

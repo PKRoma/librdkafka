@@ -82,10 +82,10 @@ const char *rd_kafka_broker_state_names[] = {
 };
 
 const char *rd_kafka_secproto_names[] = {
-	"plaintext", //[RD_KAFKA_PROTO_PLAINTEXT] = "plaintext",
-	"ssl", //[RD_KAFKA_PROTO_SSL] = "ssl",
-	"sasl_plaintext", //[RD_KAFKA_PROTO_SASL_PLAINTEXT] = "sasl_plaintext",
-	"sasl_ssl", //[RD_KAFKA_PROTO_SASL_SSL] = "sasl_ssl",
+	/*[RD_KAFKA_PROTO_PLAINTEXT] =*/ "plaintext",
+	/*[RD_KAFKA_PROTO_SSL] =*/ "ssl",
+	/*[RD_KAFKA_PROTO_SASL_PLAINTEXT] =*/ "sasl_plaintext",
+	/*[RD_KAFKA_PROTO_SASL_SSL] =*/ "sasl_ssl",
 	NULL
 };
 
