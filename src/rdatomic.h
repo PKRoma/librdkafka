@@ -3,14 +3,14 @@
 #include "tinycthread.h"
 
 typedef struct {
-	int32_t val;
+	volatile long val;
 #ifndef HAVE_ATOMICS_32
 	mtx_t lock;
 #endif
 } rd_atomic32_t;
 
 typedef struct {
-	int64_t val;
+	volatile int64_t val;
 #ifndef HAVE_ATOMICS_64
 	mtx_t lock;
 #endif
@@ -25,7 +25,7 @@ static RD_INLINE RD_UNUSED void rd_atomic32_init (rd_atomic32_t *ra, int32_t v) 
 }
 
 
-static RD_INLINE int32_t RD_UNUSED rd_atomic32_add (rd_atomic32_t *ra, int32_t v) {
+static RD_INLINE int32_t RD_UNUSED rd_atomic32_add (rd_atomic32_t *ra, long v) {
 #ifdef _MSC_VER
 	return InterlockedAdd(&ra->val, v);
 #elif !defined(HAVE_ATOMICS_32)
@@ -87,7 +87,7 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra, int32_t v)
 
 static RD_INLINE RD_UNUSED void rd_atomic64_init (rd_atomic64_t *ra, int64_t v) {
 	ra->val = v;
-#if !defined(_MSC_VER) && !defined(HAVE_ATOMICS_64)
+#if defined(_MSC_VER) || !defined(HAVE_ATOMICS_64)
 	mtx_init(&ra->lock, mtx_plain);
 #endif
 }

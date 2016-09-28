@@ -106,7 +106,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	"An application can either query this value or attempt to set it "
 	"with its list of required features to check for library support.",
 	0, 0x7fffffff, 0xff,
-	"", NULL, {
+	NULL, NULL, {
 #if WITH_ZLIB
 		{ 0x1, "gzip" },
 #endif
@@ -193,7 +193,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "broker metadata information as if the topics did not exist." },
 	{ _RK_GLOBAL, "debug", _RK_C_S2F, _RK(debug),
 	  "A comma-separated list of debug contexts to enable.",
-	  0, 0, 0, "", NULL, {
+	  0, 0, 0, NULL, NULL, {
                         { RD_KAFKA_DBG_GENERIC,  "generic" },
 			{ RD_KAFKA_DBG_BROKER,   "broker" },
 			{ RD_KAFKA_DBG_TOPIC,    "topic" },
@@ -243,7 +243,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(broker_addr_family),
           "Allowed broker IP address families: any, v4, v6",
           0, 0, AF_UNSPEC,
-          "", NULL, {
+          NULL, NULL, {
                         { AF_UNSPEC, "any" },
                         { AF_INET, "v4" },
                         { AF_INET6, "v6" },
@@ -274,7 +274,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "log_cb", _RK_C_PTR,
 	  _RK(log_cb),
 	  "Log callback (set with rd_kafka_conf_set_log_cb())",
-          0, 0, 0, "", rd_kafka_log_print },
+          0, 0, 0, NULL, rd_kafka_log_print },
         { _RK_GLOBAL, "log_level", _RK_C_INT,
           _RK(log_level),
           "Logging level (syslog(3) levels)",
@@ -293,7 +293,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL, "socket_cb", _RK_C_PTR,
           _RK(socket_cb),
           "Socket creation callback to provide race-free CLOEXEC",
-          0, 0, 0, "",
+          0, 0, 0, NULL,
 #ifdef __linux__
           rd_kafka_socket_cb_linux
 #else
@@ -303,7 +303,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL, "open_cb", _RK_C_PTR,
           _RK(open_cb),
           "File open callback to provide race-free CLOEXEC",
-          0, 0, 0, "",
+          0, 0, 0, NULL,
 #ifdef __linux__
           rd_kafka_open_cb_linux
 #else
@@ -361,7 +361,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(security_protocol),
 	  "Protocol used to communicate with brokers.",
 	  0, 0, RD_KAFKA_PROTO_PLAINTEXT,
-	  "", NULL, {
+	  NULL, NULL, {
 			{ RD_KAFKA_PROTO_PLAINTEXT, "plaintext" },
 #if WITH_SSL
 			{ RD_KAFKA_PROTO_SSL, "ssl" },
@@ -541,7 +541,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "'broker' - broker commit store "
           "(requires Apache Kafka 0.8.2 or later on the broker).",
           0, 0, RD_KAFKA_OFFSET_METHOD_BROKER,
-          "", NULL, {
+          NULL, NULL, {
                         { RD_KAFKA_OFFSET_METHOD_NONE, "none" },
                         { RD_KAFKA_OFFSET_METHOD_FILE, "file" },
                         { RD_KAFKA_OFFSET_METHOD_BROKER, "broker" }
@@ -595,7 +595,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "This is the default value for all topics, may be overriden by "
 	  "the topic configuration property `compression.codec`. ",
 	  0, 0, RD_KAFKA_COMPRESSION_NONE,
-	  "", NULL, {
+	  NULL, NULL, {
 			{ RD_KAFKA_COMPRESSION_NONE,   "none" },
 #if WITH_ZLIB
 			{ RD_KAFKA_COMPRESSION_GZIP,   "gzip" },
@@ -640,7 +640,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "in sync replicas (ISRs) or broker's `in.sync.replicas` "
 	  "setting before sending response. ",
 	  -1, 1000, 1,
-	  "", NULL, {
+	  NULL, NULL, {
 			{ -1, "all" },
 		}
 	},
@@ -677,7 +677,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RKT(compression_codec),
 	  "Compression codec to use for compressing message sets. ",
 	  0, 0, RD_KAFKA_COMPRESSION_INHERIT,
-	  "", NULL, {
+	  NULL, NULL, {
 		  { RD_KAFKA_COMPRESSION_NONE, "none" },
 #if WITH_ZLIB
 		  { RD_KAFKA_COMPRESSION_GZIP, "gzip" },
@@ -725,7 +725,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "'error' - trigger an error which is retrieved by consuming messages "
 	  "and checking 'message->err'.",
 	  0, 0, RD_KAFKA_OFFSET_END,
-	  "", NULL, {
+	  NULL, NULL, {
 			{ RD_KAFKA_OFFSET_BEGINNING, "smallest" },
 			{ RD_KAFKA_OFFSET_BEGINNING, "earliest" },
 			{ RD_KAFKA_OFFSET_BEGINNING, "beginning" },
@@ -757,7 +757,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "(requires \"group.id\" to be configured and "
 	  "Apache Kafka 0.8.2 or later on the broker.).",
           0, 0, RD_KAFKA_OFFSET_METHOD_BROKER, /* FIXME: warn about default change */
-          "", NULL, {
+          NULL, NULL, {
                         { RD_KAFKA_OFFSET_METHOD_FILE, "file" },
                         { RD_KAFKA_OFFSET_METHOD_BROKER, "broker" }
                 }

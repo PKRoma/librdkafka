@@ -262,6 +262,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
         int good = 0;
         rd_kafka_resp_err_t all_err = 0;
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
+        rd_kafka_msgq_init(&tmpq);
 
         /* For partitioner; hold lock for entire run,
          * for one partition: only acquire when needed at the end. */

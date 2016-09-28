@@ -61,6 +61,13 @@ int tmout_multip (int msecs) {
 #define _C_MAG "\033[35m"
 #define _C_CYA "\033[36m"
 
+enum test_state {
+        TEST_NOT_STARTED,
+        TEST_SKIPPED,
+        TEST_RUNNING,
+        TEST_PASSED,
+        TEST_FAILED,
+};
 struct test {
         /**
          * Setup
@@ -87,13 +94,7 @@ struct test {
         int64_t duration;
         FILE   *stats_fp;
 	int64_t timeout;
-        enum {
-                TEST_NOT_STARTED,
-                TEST_SKIPPED,
-                TEST_RUNNING,
-                TEST_PASSED,
-                TEST_FAILED,
-        } state;
+        enum test_state state;
 };
 
 
@@ -216,7 +217,7 @@ static RD_INLINE int64_t test_clock (void) {
 	gettimeofday(&tv, NULL);
 	return ((int64_t)tv.tv_sec * 1000000LLU) + (int64_t)tv.tv_usec;
 #elif _MSC_VER
-	return (int64_t)GetTickCount64() * 1000LLU;
+	return (int64_t)GetTickCount64() * 1000LL;
 #else
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);

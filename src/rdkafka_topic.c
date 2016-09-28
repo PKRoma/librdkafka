@@ -523,6 +523,8 @@ static void rd_kafka_topic_assign_uas (rd_kafka_itopic_t *rkt) {
 	rd_kafka_msgq_t uas = RD_KAFKA_MSGQ_INITIALIZER(uas);
 	rd_kafka_msgq_t failed = RD_KAFKA_MSGQ_INITIALIZER(failed);
 	int cnt;
+	rd_kafka_msgq_init(&uas);
+	rd_kafka_msgq_init(&failed);
 
 	if (rkt->rkt_rk->rk_type != RD_KAFKA_PRODUCER)
 		return;
@@ -798,6 +800,7 @@ void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt) {
         shptr_rd_kafka_itopic_t *s_rkt;
 	int i;
 	rd_kafka_msgq_t tmpq = RD_KAFKA_MSGQ_INITIALIZER(tmpq);
+	rd_kafka_msgq_init(&tmpq);
 
 	/* Move all partition's queued messages to our temporary queue
 	 * and purge that queue later outside the topic_wrlock since

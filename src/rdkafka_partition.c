@@ -205,6 +205,11 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
 
 	rd_kafka_q_fwd_set(rktp->rktp_ops, rkt->rkt_rk->rk_ops);
 
+	rd_atomic64_init(&rktp->rktp_c.tx_msgs, 0);
+	rd_atomic64_init(&rktp->rktp_c.tx_bytes, 0);
+	rd_atomic64_init(&rktp->rktp_c.msgs, 0);
+	rd_atomic64_init(&rktp->rktp_c.rx_ver_drops, 0);
+
 	return rd_kafka_toppar_keep(rktp);
 }
 

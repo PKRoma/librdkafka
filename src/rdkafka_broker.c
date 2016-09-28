@@ -3213,6 +3213,7 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
         /* Timeout scan */
         if (unlikely(do_timeout_scan)) {
                 rd_kafka_msgq_t timedout = RD_KAFKA_MSGQ_INITIALIZER(timedout);
+                rd_kafka_msgq_init(&timedout);
 
                 if (rd_kafka_msgq_age_scan(&rktp->rktp_xmit_msgq,
                                            &timedout, now)) {

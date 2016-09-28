@@ -49,6 +49,8 @@ typedef unsigned long long uint64_t;
 #define PRIu32 _PFX_32 "u"
 #define PRId64 _PFX_64 "d"
 #define PRIu64 _PFX_64 "u"
+#define PRIx64 _PFX_64 "x"
+#define SCNu64 _PFX_64 "u"
 #define bool int
 #pragma intrinsic(_InterlockedIncrement)
 #pragma intrinsic(_InterlockedDecrement)
@@ -57,6 +59,7 @@ typedef unsigned long long uint64_t;
 #define InterlockedDecrement _InterlockedDecrement
 #define InterlockedExchangeAdd _InterlockedExchangeAdd
 #define InterlockedAdd _InterlockedExchangeAdd
+#define strtoll _strtoi64
 #define strtoull _strtoui64
 
 
