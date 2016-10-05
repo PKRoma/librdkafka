@@ -42,7 +42,6 @@
 #include <string.h>
 #include <ctype.h>
 
-#include "rd.h"
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
 #include "rdkafka_topic.h"

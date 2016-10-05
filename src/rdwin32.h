@@ -40,8 +40,6 @@
 #define WIN32_MEAN_AND_LEAN
 #include <Winsock2.h>  /* for struct timeval */
 typedef short int16_t;
-typedef int int32_t;
-typedef long long int64_t;
 typedef unsigned long long uint64_t;
 #define _PFX_32 "l"
 #define _PFX_64 "ll"
@@ -51,7 +49,6 @@ typedef unsigned long long uint64_t;
 #define PRIu64 _PFX_64 "u"
 #define PRIx64 _PFX_64 "x"
 #define SCNu64 _PFX_64 "u"
-#define bool int
 #pragma intrinsic(_InterlockedIncrement)
 #pragma intrinsic(_InterlockedDecrement)
 #pragma intrinsic(_InterlockedExchangeAdd)

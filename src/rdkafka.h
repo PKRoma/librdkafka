@@ -57,7 +57,8 @@ extern "C" {
 #endif
 
 #ifdef _MSC_VER
-#include "rdwin32.h"
+typedef int int32_t;
+typedef long long int64_t;
 #include <basetsd.h>
 typedef SSIZE_T ssize_t;
 #define RD_UNUSED

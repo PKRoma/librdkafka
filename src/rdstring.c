@@ -27,7 +27,7 @@
  */
 
 
-#include "rd.h"
+#include "rdkafka_int.h"
 
 /**
  * @brief Render string \p template using \p callback for key lookups.

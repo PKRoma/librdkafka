@@ -37,7 +37,7 @@ freely, subject to the following restrictions:
   #include <sys/timeb.h>
 #endif
 
-#include "rd.h"
+#include "rdkafka_int.h"
 
 /* Standard, good-to-have defines */
 #ifndef NULL
