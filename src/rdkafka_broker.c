@@ -4687,6 +4687,18 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	else /* disabled */
 		rkb->rkb_ts_metadata_poll = UINT64_MAX;
 
+    rd_atomic64_init(&rkb->rkb_c.tx_bytes, 0);
+    rd_atomic64_init(&rkb->rkb_c.tx, 0);
+    rd_atomic64_init(&rkb->rkb_c.tx_err, 0);
+    rd_atomic64_init(&rkb->rkb_c.tx_retries, 0);
+    rd_atomic64_init(&rkb->rkb_c.req_timeouts, 0);
+    rd_atomic64_init(&rkb->rkb_c.rx_bytes, 0);
+    rd_atomic64_init(&rkb->rkb_c.rx, 0);
+    rd_atomic64_init(&rkb->rkb_c.rx_err, 0);
+    rd_atomic64_init(&rkb->rkb_c.rx_corrid_err, 0);
+    rd_atomic64_init(&rkb->rkb_c.rx_partial, 0);
+    rd_atomic64_init(&rkb->rkb_c.zbuf_grow, 0);
+    rd_atomic64_init(&rkb->rkb_c.buf_grow, 0);
 #ifndef _MSC_VER
         /* Block all signals in newly created thread.
          * To avoid race condition we block all signals in the calling

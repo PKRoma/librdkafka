@@ -383,7 +383,12 @@ RD_KAFKA_REPLYQ(rd_kafka_q_t *Q, int32_t VERSION) {
 #endif
 
 /* Construct temporary on-stack replyq for indicating no replyq. */
-#define RD_KAFKA_NO_REPLYQ  RD_KAFKA_REPLYQ(NULL, 0)
+static RD_INLINE RD_UNUSED rd_kafka_replyq_t
+RD_KAFKA_NO_REPLYQ0(int32_t VERSION) {
+	rd_kafka_replyq_t replyq = {NULL, VERSION};
+	return replyq;
+}
+#define RD_KAFKA_NO_REPLYQ  RD_KAFKA_NO_REPLYQ0(0)
 
 /**
  * Set up replyq.

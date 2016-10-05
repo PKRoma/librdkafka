@@ -93,14 +93,7 @@ static RD_INLINE RD_UNUSED void rd_atomic64_init (rd_atomic64_t *ra, int64_t v) 
 }
 
 static RD_INLINE int64_t RD_UNUSED rd_atomic64_add (rd_atomic64_t *ra, int64_t v) {
-#ifdef _MSC_VER
-	int64_t r;
-	mtx_lock(&ra->lock);
-	ra->val += v;
-	r = ra->val;
-	mtx_unlock(&ra->lock);
-	return r;
-#elif !defined(HAVE_ATOMICS_64)
+#if defined(_MSC_VER) || !defined(HAVE_ATOMICS_64)
 	int64_t r;
 	mtx_lock(&ra->lock);
 	ra->val += v;
