@@ -44,7 +44,11 @@
 #pragma once
 
 #include <stdio.h>
-#ifndef _MSC_VER
+#ifdef _MSC_VER
+typedef int int32_t;
+typedef long long int64_t;
+#define _RDKAFKA_H_
+#else
 #include <inttypes.h>
 #endif
 #include <sys/types.h>
