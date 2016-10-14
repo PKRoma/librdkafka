@@ -345,7 +345,7 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 	_ERR_DESC(RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE,
 		  "Local: Timed out in queue"),
 
-	_ED(-166), _ED(-165), _ED(-164), _ED(-163), _ED(-162), _ED(-161),
+	_ED(-165), _ED(-164), _ED(-163), _ED(-162), _ED(-161),
 	_ED(-160), _ED(-159), _ED(-158), _ED(-157), _ED(-156), _ED(-155), _ED(-154), _ED(-153), _ED(-152), _ED(-151),
 	_ED(-150), _ED(-149), _ED(-148), _ED(-147), _ED(-146), _ED(-145), _ED(-144), _ED(-143), _ED(-142), _ED(-141),
 	_ED(-140), _ED(-129), _ED(-138), _ED(-137), _ED(-136), _ED(-135), _ED(-134), _ED(-133), _ED(-132), _ED(-131),
