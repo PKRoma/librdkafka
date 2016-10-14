@@ -27,7 +27,7 @@
  */
 
 
-#include "rdkafka_int.h"
+#include "rd.h"
 #include "rdaddr.h"
 #include "rdrand.h"
 

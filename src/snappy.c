@@ -58,11 +58,10 @@
 
 #include "rd.h"
 
+#define inline __inline
+#ifdef _MSC_VER
 #define true 1
 #define false 0
-
-#ifdef _MSC_VER
-#define inline __inline
 #endif
 
 #define CRASH_UNLESS(x) BUG_ON(!(x))

@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "rdkafka_int.h"
+#include "rd.h"
 #include "rdrand.h"
 
 
