@@ -26,12 +26,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdlib.h>
-#include <ctype.h>
-#include <stddef.h>
-
 #include "rdkafka_int.h"
 #include "rdkafka_feature.h"
+
+#include <ctype.h>
 
 struct rd_kafka_property {
 	rd_kafka_conf_scope_t scope;

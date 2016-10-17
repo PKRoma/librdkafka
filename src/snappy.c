@@ -59,10 +59,8 @@
 #include "rd.h"
 
 #define inline __inline
-#ifdef _MSC_VER
 #define true 1
 #define false 0
-#endif
 
 #define CRASH_UNLESS(x) BUG_ON(!(x))
 #define CHECK(cond) CRASH_UNLESS(cond)
