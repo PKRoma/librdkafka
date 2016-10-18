@@ -43,6 +43,15 @@
 /* @cond NO_DOC */
 #pragma once
 
+#ifdef _MSC_VER
+/* Win32/Visual Studio */
+#include "rdwin32.h"
+
+#else
+/* POSIX / UNIX based systems */
+#include "rdposix.h"
+#endif
+
 #include <stdio.h>
 #ifdef _MSC_VER
 typedef int int32_t;
