@@ -27,7 +27,8 @@ static RD_INLINE RD_UNUSED void rd_atomic32_init (rd_atomic32_t *ra, int32_t v) 
 
 static RD_INLINE int32_t RD_UNUSED rd_atomic32_add (rd_atomic32_t *ra, long v) {
 #ifdef _MSC_VER
-	return InterlockedAdd(&ra->val, v);
+	InterlockedAdd(&ra->val, v);
+	return ra->val;
 #elif !defined(HAVE_ATOMICS_32)
 	int32_t r;
 	mtx_lock(&ra->lock);
@@ -42,7 +43,8 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_add (rd_atomic32_t *ra, long v) {
 
 static RD_INLINE int32_t RD_UNUSED rd_atomic32_sub(rd_atomic32_t *ra, int32_t v) {
 #ifdef _MSC_VER
-	return InterlockedAdd(&ra->val, -v);
+	InterlockedAdd(&ra->val, -v);
+	return ra->val;
 #elif !defined(HAVE_ATOMICS_32)
 	int32_t r;
 	mtx_lock(&ra->lock);
