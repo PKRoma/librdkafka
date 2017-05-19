@@ -30,6 +30,7 @@
 #include "rdkafka_feature.h"
 
 #include <ctype.h>
+#include <stddef.h>
 
 struct rd_kafka_property {
 	rd_kafka_conf_scope_t scope;
