@@ -116,9 +116,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 		{ 0x8, "sasl" },
 #endif
 		{ 0x10, "regex" },
-#if WITH_LZ4
 		{ 0x20, "lz4" },
-#endif
 		{ 0, NULL }
 		}
 	},
@@ -126,7 +124,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Client identifier.",
 	  0, 0, 0, "rdkafka" },
 	{ _RK_GLOBAL, "metadata.broker.list", _RK_C_STR, _RK(brokerlist),
-	  "Initial list of brokers. "
+	  "Initial list of brokers as a CSV list of broker host or host:port. "
 	  "The application may also use `rd_kafka_brokers_add()` to add "
 	  "brokers during runtime." },
 	{ _RK_GLOBAL, "bootstrap.servers", _RK_C_ALIAS, 0,
@@ -154,6 +152,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Maximum number of in-flight requests the client will send. "
 	  "This setting applies per broker connection.",
 	  1, 1000000, 1000000 },
+        { _RK_GLOBAL, "max.in.flight", _RK_C_ALIAS, 0,
+          "",
+		  0, 0, 0 "max.in.flight.requests.per.connection" },
 	{ _RK_GLOBAL, "metadata.request.timeout.ms", _RK_C_INT,
 	  _RK(metadata_request_timeout_ms),
 	  "Non-topic request timeout in milliseconds. "
@@ -165,19 +166,22 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The metadata is automatically refreshed on error and connect. "
 	  "Use -1 to disable the intervalled refresh.",
 	  -1, 3600*1000, 5*60*1000 },
-	{ _RK_GLOBAL, "metadata.max.age.ms", _RK_C_ALIAS,
-	  0, "", 0, 0, 0, "topic.metadata.refresh.interval.ms" },
-	{ _RK_GLOBAL, "topic.metadata.refresh.fast.cnt", _RK_C_INT,
-	  _RK(metadata_refresh_fast_cnt),
-	  "When a topic looses its leader this number of metadata requests "
-	  "are sent with `topic.metadata.refresh.fast.interval.ms` interval "
-	  "disregarding the `topic.metadata.refresh.interval.ms` value. "
-	  "This is used to recover quickly from transitioning leader brokers.",
-	  0, 1000, 10 },
-	{ _RK_GLOBAL, "topic.metadata.refresh.fast.interval.ms", _RK_C_INT,
-	  _RK(metadata_refresh_fast_interval_ms),
-	  "See `topic.metadata.refresh.fast.cnt` description",
-	  1, 60*1000, 250 },
+	{ _RK_GLOBAL, "metadata.max.age.ms", _RK_C_INT,
+          _RK(metadata_max_age_ms),
+          "Metadata cache max age. "
+          "Defaults to metadata.refresh.interval.ms * 3",
+          1, 24*3600*1000, -1 },
+        { _RK_GLOBAL, "topic.metadata.refresh.fast.interval.ms", _RK_C_INT,
+          _RK(metadata_refresh_fast_interval_ms),
+          "When a topic looses its leader a new metadata request will be "
+          "enqueued with this initial interval, exponentially increasing "
+          "until the topic metadata has been refreshed. "
+          "This is used to recover quickly from transitioning leader brokers.",
+          1, 60*1000, 250 },
+        { _RK_GLOBAL, "topic.metadata.refresh.fast.cnt", _RK_C_INT,
+          _RK(metadata_refresh_fast_cnt),
+          "*Deprecated: No longer used.*",
+          0, 1000, 10 },
         { _RK_GLOBAL, "topic.metadata.refresh.sparse", _RK_C_BOOL,
           _RK(metadata_refresh_sparse),
           "Sparse metadata requests (consumes less network bandwidth)",
@@ -211,8 +215,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(socket_blocking_max_ms),
 	  "Maximum time a broker socket operation may block. "
           "A lower value improves responsiveness at the expense of "
-          "slightly higher CPU usage.",
-	  1, 60*1000, 100 },
+          "slightly higher CPU usage. **Deprecated**",
+	  1, 60*1000, 1000 },
 	{ _RK_GLOBAL, "socket.send.buffer.bytes", _RK_C_INT,
 	  _RK(socket_sndbuf_size),
 	  "Broker socket send buffer size. System default is used if 0.",
@@ -224,6 +228,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "socket.keepalive.enable", _RK_C_BOOL,
 	  _RK(socket_keepalive),
           "Enable TCP keep-alives (SO_KEEPALIVE) on broker sockets",
+          0, 1, 0 },
+	{ _RK_GLOBAL, "socket.nagle.disable", _RK_C_BOOL,
+	  _RK(socket_nagle_disable),
+          "Disable the Nagle algorithm (TCP_NODELAY).",
           0, 1, 0 },
         { _RK_GLOBAL, "socket.max.fails", _RK_C_INT,
           _RK(socket_max_fails),
@@ -276,11 +284,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(log_level),
           "Logging level (syslog(3) levels)",
           0, 7, 6 },
+        { _RK_GLOBAL, "log.queue", _RK_C_BOOL, _RK(log_queue),
+          "Disable spontaneous log_cb from internal librdkafka "
+          "threads, instead enqueue log messages on queue set with "
+          "`rd_kafka_set_log_queue()` and serve log callbacks or "
+          "events through the standard poll APIs. "
+          "**NOTE**: Log messages will linger in a temporary queue "
+          "until the log queue has been set.",
+          0, 1, 0 },
 	{ _RK_GLOBAL, "log.thread.name", _RK_C_BOOL,
 	  _RK(log_thread_name),
 	  "Print internal thread name in log messages "
 	  "(useful for debugging librdkafka internals)",
-	  0, 1, ENABLE_DEVEL },
+	  0, 1, 1 },
 	{ _RK_GLOBAL, "log.connection.close", _RK_C_BOOL,
 	  _RK(log_connection_close),
 	  "Log broker disconnects. "
@@ -296,6 +312,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #else
           rd_kafka_socket_cb_generic
 #endif
+        },
+        { _RK_GLOBAL, "connect_cb", _RK_C_PTR,
+          _RK(connect_cb),
+          "Socket connect callback",
+        },
+        { _RK_GLOBAL, "closesocket_cb", _RK_C_PTR,
+          _RK(closesocket_cb),
+          "Socket close callback",
         },
         { _RK_GLOBAL, "open_cb", _RK_C_PTR,
           _RK(open_cb),
@@ -411,10 +435,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	 "Supported: GSSAPI, PLAIN. "
 	 "**NOTE**: Despite the name only one mechanism must be configured.",
 	 .sdef = "GSSAPI",
-	 .s2i = {
-			{ 0, "GSSAPI" },
-			{ 0, "PLAIN" }
-		},
 	 .validate = rd_kafka_conf_validate_single },
 	{ _RK_GLOBAL, "sasl.kerberos.service.name", _RK_C_STR,
 	  _RK(sasl.service_name),
@@ -424,6 +444,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(sasl.principal),
 	  "This client's Kerberos principal name.",
 	  .sdef = "kafkaclient" },
+#ifndef _MSC_VER
 	{ _RK_GLOBAL, "sasl.kerberos.kinit.cmd", _RK_C_STR,
 	  _RK(sasl.kinit_cmd),
 	  "Full kerberos kinit command string, %{config.prop.name} is replaced "
@@ -441,6 +462,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(sasl.relogin_min_time),
 	  "Minimum time in milliseconds between key refresh attempts.",
 	  1, 86400*1000, 60*1000 },
+#endif
 	{ _RK_GLOBAL, "sasl.username", _RK_C_STR,
 	  _RK(sasl.username),
 	  "SASL username for use with the PLAIN mechanism" },
@@ -487,7 +509,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
 	  _RK(auto_commit_interval_ms),
 	  "The frequency in milliseconds that the consumer offsets "
-	  "are committed (written) to offset storage. (0 = disable)",
+	  "are committed (written) to offset storage. (0 = disable). "
+          "This setting is used by the high-level consumer.",
           0, 86400*1000, 5*1000 },
         { _RK_GLOBAL|_RK_CONSUMER, "enable.auto.offset.store", _RK_C_BOOL,
           _RK(enable_auto_offset_store),
@@ -560,7 +583,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the "
 	  "consumer reaches the end of a partition.",
 	  0, 1, 1 },
-
+        { _RK_GLOBAL|_RK_CONSUMER, "check.crcs", _RK_C_BOOL,
+          _RK(check_crcs),
+          "Verify CRC32 of consumed messages, ensuring no on-the-wire or "
+          "on-disk corruption to the messages occurred. This check comes "
+          "at slightly increased CPU usage.",
+          0, 1, 0 },
 	/* Global producer properties */
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.messages", _RK_C_INT,
 	  _RK(queue_buffering_max_msgs),
@@ -569,12 +597,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.kbytes", _RK_C_INT,
 	  _RK(queue_buffering_max_kbytes),
 	  "Maximum total message size sum allowed on the producer queue.",
-	  1, INT_MAX, 4000000 },
+	  1, INT_MAX/1024, 4000000 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.ms", _RK_C_INT,
 	  _RK(buffering_max_ms),
 	  "Maximum time, in milliseconds, for buffering data "
 	  "on the producer queue.",
-	  1, 900*1000, 1000 },
+	  0, 900*1000, 1000 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "message.send.max.retries", _RK_C_INT,
 	  _RK(max_retries),
 	  "How many times to retry sending a failing MessageSet. "
@@ -600,9 +628,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SNAPPY
 			{ RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
 #endif
-#if WITH_LZ4
                         { RD_KAFKA_COMPRESSION_LZ4, "lz4" },
-#endif
 			{ 0 }
 		} },
 	{ _RK_GLOBAL|_RK_PRODUCER, "batch.num.messages", _RK_C_INT,
@@ -682,10 +708,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SNAPPY
 		  { RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
 #endif
-#if WITH_LZ4
 		  { RD_KAFKA_COMPRESSION_LZ4, "lz4" },
-#endif
-
 		  { RD_KAFKA_COMPRESSION_INHERIT, "inherit" },
 		  { 0 }
 		} },
@@ -711,7 +734,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
 	  _RKT(auto_commit_interval_ms),
 	  "The frequency in milliseconds that the consumer offsets "
-	  "are committed (written) to offset storage.",
+	  "are committed (written) to offset storage. "
+          "This setting is used by the low-level legacy consumer.",
 	  10, 86400*1000, 60*1000 },
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.offset.reset", _RK_C_S2I,
 	  _RKT(auto_offset_reset),
@@ -753,7 +777,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "'broker' - broker commit store "
           "(requires \"group.id\" to be configured and "
 	  "Apache Kafka 0.8.2 or later on the broker.).",
-          0, 0, RD_KAFKA_OFFSET_METHOD_BROKER, /* FIXME: warn about default change */
+          0, 0, RD_KAFKA_OFFSET_METHOD_BROKER,
           NULL, NULL, {
                         { RD_KAFKA_OFFSET_METHOD_FILE, "file" },
                         { RD_KAFKA_OFFSET_METHOD_BROKER, "broker" }
@@ -782,7 +806,7 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 			    const char *istr, int ival, prop_set_mode_t set_mode,
                             char *errstr, size_t errstr_size) {
 
-#define _RK_PTR(TYPE,BASE,OFFSET)  (TYPE)(((char *)(BASE))+(OFFSET))
+#define _RK_PTR(TYPE,BASE,OFFSET)  (TYPE)(void *)(((char *)(BASE))+(OFFSET))
 	switch (prop->type)
 	{
 	case _RK_C_STR:
@@ -854,7 +878,7 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 			if (!(*plist =
 			      rd_kafka_pattern_list_new(istr,
 							errstr,
-							errstr_size)))
+							(int)errstr_size)))
 				return RD_KAFKA_CONF_INVALID;
 		} else
 			*plist = NULL;
@@ -1189,11 +1213,26 @@ static int rd_kafka_anyconf_set (int scope, void *conf,
 
 
 rd_kafka_conf_res_t rd_kafka_conf_set (rd_kafka_conf_t *conf,
-				       const char *name,
-				       const char *value,
-				       char *errstr, size_t errstr_size) {
-	return rd_kafka_anyconf_set(_RK_GLOBAL, conf, name, value,
-				    errstr, errstr_size);
+                                       const char *name,
+                                       const char *value,
+                                       char *errstr, size_t errstr_size) {
+        rd_kafka_conf_res_t res;
+        res = rd_kafka_anyconf_set(_RK_GLOBAL, conf, name, value,
+                                   errstr, errstr_size);
+        if (res != RD_KAFKA_CONF_UNKNOWN)
+                return res;
+
+        /* Fallthru:
+         * If the global property was unknown, try setting it on the
+         * default topic config. */
+        if (!conf->topic_conf) {
+                /* Create topic config, might be over-written by application
+                 * later. */
+                conf->topic_conf = rd_kafka_topic_conf_new();
+        }
+
+        return rd_kafka_topic_conf_set(conf->topic_conf, name, value,
+                                       errstr, errstr_size);
 }
 
 
@@ -1312,7 +1351,8 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src) {
 
                         if (!strcmp(prop->name, "default_topic_conf") && val)
                                 val = (void *)rd_kafka_topic_conf_dup(
-                                        (const rd_kafka_topic_conf_t *)val);
+                                        (const rd_kafka_topic_conf_t *)
+                                        (void *)val);
 			break;
                 case _RK_C_KSTR:
                 {
@@ -1457,6 +1497,24 @@ void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
                                                     void *opaque)) {
         conf->socket_cb = socket_cb;
 }
+
+void
+rd_kafka_conf_set_connect_cb (rd_kafka_conf_t *conf,
+                              int (*connect_cb) (int sockfd,
+                                                 const struct sockaddr *addr,
+                                                 int addrlen,
+                                                 const char *id,
+                                                 void *opaque)) {
+        conf->connect_cb = connect_cb;
+}
+
+void
+rd_kafka_conf_set_closesocket_cb (rd_kafka_conf_t *conf,
+                                  int (*closesocket_cb) (int sockfd,
+                                                         void *opaque)) {
+        conf->closesocket_cb = closesocket_cb;
+}
+
 
 
 #ifndef _MSC_VER
@@ -1691,7 +1749,15 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_get (const rd_kafka_topic_conf_t *conf,
 rd_kafka_conf_res_t rd_kafka_conf_get (const rd_kafka_conf_t *conf,
                                        const char *name,
                                        char *dest, size_t *dest_size) {
-        return rd_kafka_anyconf_get(_RK_GLOBAL, conf, name, dest, dest_size);
+        rd_kafka_conf_res_t res;
+        res = rd_kafka_anyconf_get(_RK_GLOBAL, conf, name, dest, dest_size);
+        if (res != RD_KAFKA_CONF_UNKNOWN || !conf->topic_conf)
+                return res;
+
+        /* Fallthru:
+         * If the global property was unknown, try getting it from the
+         * default topic config, if any. */
+        return rd_kafka_topic_conf_get(conf->topic_conf, name, dest, dest_size);
 }
 
 

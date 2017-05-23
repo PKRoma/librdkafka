@@ -66,7 +66,7 @@ typedef struct rd_kafka_replyq_s {
 
 
 typedef enum {
-        RD_KAFKA_OP_NONE,
+        RD_KAFKA_OP_NONE,     /* No specific type, use OP_CB */
 	RD_KAFKA_OP_FETCH,    /* Kafka thread -> Application */
 	RD_KAFKA_OP_ERR,      /* Kafka thread -> Application */
         RD_KAFKA_OP_CONSUMER_ERR, /* Kafka thread -> Application */
@@ -74,7 +74,6 @@ typedef enum {
 			       * Produce message delivery report */
 	RD_KAFKA_OP_STATS,    /* Kafka thread -> Application */
 
-	RD_KAFKA_OP_METADATA_REQ,  /* any -> Broker thread: request metadata */
         RD_KAFKA_OP_OFFSET_COMMIT, /* any -> toppar's Broker thread */
         RD_KAFKA_OP_NODE_UPDATE,   /* any -> Broker thread: node update */
 
@@ -105,6 +104,8 @@ typedef enum {
 	RD_KAFKA_OP_THROTTLE,        /* Throttle info */
 	RD_KAFKA_OP_NAME,            /* Request name */
 	RD_KAFKA_OP_OFFSET_RESET,    /* Offset reset */
+        RD_KAFKA_OP_METADATA,        /* Metadata response */
+        RD_KAFKA_OP_LOG,             /* Log */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -112,6 +113,22 @@ typedef enum {
 #define RD_KAFKA_OP_CB        (1 << 30)  /* Callback op. */
 #define RD_KAFKA_OP_REPLY     (1 << 31)  /* Reply op. */
 #define RD_KAFKA_OP_FLAGMASK  (RD_KAFKA_OP_CB | RD_KAFKA_OP_REPLY)
+
+
+/**
+ * @brief Op/queue priority levels.
+ * @remark Since priority levels alter the FIFO order, pay extra attention
+ *         to preserve ordering as deemed necessary.
+ * @remark Priority should only be set on ops destined for application
+ *         facing queues (rk_rep, rkcg_q, etc).
+ */
+typedef enum {
+        RD_KAFKA_PRIO_NORMAL = 0,   /* Normal bulk, messages, DRs, etc. */
+        RD_KAFKA_PRIO_MEDIUM,       /* Prioritize in front of bulk,
+                                     * still at some scale. e.g. logs, .. */
+        RD_KAFKA_PRIO_HIGH,         /* Small scale high priority */
+        RD_KAFKA_PRIO_FLASH         /* Micro scale, immediate delivery. */
+} rd_kafka_op_prio_t;
 
 
 #define RD_KAFKA_OP_TYPE_ASSERT(rko,type) \
@@ -127,6 +144,8 @@ struct rd_kafka_op_s {
 	rd_kafka_resp_err_t   rko_err;
 	int32_t               rko_len;    /* Depends on type, typically the
 					   * message length. */
+        rd_kafka_op_prio_t    rko_prio;   /* In-queue priority.
+                                           * Higher value means higher prio. */
 
 	shptr_rd_kafka_toppar_t *rko_rktp;
 
@@ -138,7 +157,19 @@ struct rd_kafka_op_s {
 	 * .q is refcounted. */
 	rd_kafka_replyq_t rko_replyq;
 
+        /* Original queue's op serve callback and opaque, if any.
+         * Mainly used for forwarded queues to use the original queue's
+         * serve function from the forwarded position.
+         * Shall return 1 if op was handled and destroyed, else 0. */
+        int (*rko_serve) (rd_kafka_t *rk, rd_kafka_op_t *rko,
+                          int cb_type, void *opaque);
+        void *rko_serve_opaque;
+
 	rd_kafka_t     *rko_rk;
+
+#if ENABLE_DEVEL
+        const char *rko_source;  /**< Where op was created */
+#endif
 
         /* RD_KAFKA_OP_CB */
         void          (*rko_op_cb) (rd_kafka_t *rk, struct rd_kafka_op_s *rko);
@@ -164,6 +195,8 @@ struct rd_kafka_op_s {
 			void *opaque;
 			int silent_empty; /**< Fail silently if there are no
 					   *   offsets to commit. */
+                        rd_ts_t ts_timeout;
+                        char *reason;
 		} offset_commit;
 
 		struct {
@@ -203,12 +236,8 @@ struct rd_kafka_op_s {
 			rd_kafka_buf_t *rkbuf;
 		} xbuf; /* XMIT_BUF and RECV_BUF */
 
-		struct {
-			rd_kafka_topic_t *rkt;
-			int  all_topics;
-			char reason[128];
-			struct rd_kafka_metadata *metadata;
-		} metadata;
+                /* RD_KAFKA_OP_METADATA */
+                rd_kafka_metadata_t *metadata;
 
 		struct {
 			shptr_rd_kafka_itopic_t *s_rkt;
@@ -236,6 +265,12 @@ struct rd_kafka_op_s {
 			int pause;
 			int flag;
 		} pause;
+
+                struct {
+                        char fac[64];
+                        int  level;
+                        char *str;
+                } log;
 	} rko_u;
 };
 
@@ -246,15 +281,24 @@ TAILQ_HEAD(rd_kafka_op_head_s, rd_kafka_op_s);
 
 const char *rd_kafka_op2str (rd_kafka_op_type_t type);
 void rd_kafka_op_destroy (rd_kafka_op_t *rko);
-rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type);
+rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type);
+#if ENABLE_DEVEL
+#define _STRINGIFYX(A) #A
+#define _STRINGIFY(A) _STRINGIFYX(A)
+#define rd_kafka_op_new(type)                                   \
+        rd_kafka_op_new0(__FILE__ ":" _STRINGIFY(__LINE__), type)
+#else
+#define rd_kafka_op_new(type) rd_kafka_op_new0(NULL, type)
+#endif
 rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
-				      rd_kafka_resp_err_t err);
-
-
-
+                                      rd_kafka_resp_err_t err);
+rd_kafka_op_t *rd_kafka_op_new_cb (rd_kafka_t *rk,
+                                   rd_kafka_op_type_t type,
+                                   void (*cb) (rd_kafka_t *rk,
+                                               rd_kafka_op_t *rko));
 int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err);
 
-
+#define rd_kafka_op_set_prio(rko,prio) ((rko)->rko_prio = prio)
 
 
 #define rd_kafka_op_err(rk,err,...) do {				\
@@ -282,7 +326,11 @@ void rd_kafka_op_throttle_time (struct rd_kafka_broker_s *rkb,
 				rd_kafka_q_t *rkq,
 				int throttle_time);
 
-int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko);
+int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko, int cb_type);
+int rd_kafka_op_handle (rd_kafka_t *rk, rd_kafka_op_t *rko,
+                        int cb_type, void *opaque,
+                        int (*callback) (rd_kafka_t *rk, rd_kafka_op_t *rko,
+                                         int cb_type, void *opaque));
 
 extern rd_atomic32_t rd_kafka_op_cnt;
 

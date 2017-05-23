@@ -33,42 +33,14 @@
 
 
 #include <stdlib.h>
+#include <inttypes.h>
 #include <sys/types.h>
 #include <time.h>
 #include <assert.h>
-#include <malloc.h>
 #define WIN32_MEAN_AND_LEAN
 #include <Winsock2.h>  /* for struct timeval */
-typedef short int16_t;
-#ifndef _RDKAFKA_H_
-typedef int int32_t;
-typedef long long int64_t;
-#endif
-typedef unsigned long long uint64_t;
-#define _PFX_32 "l"
-#define _PFX_64 "ll"
-#define PRId32 _PFX_32 "d"
-#define PRIu32 _PFX_32 "u"
-#ifndef PRId64
-#define PRId64 _PFX_64 "d"
-#endif
-#ifndef PRIu64
-#define PRIu64 _PFX_64 "u"
-#endif
-#ifndef PRIx64
-#define PRIx64 _PFX_64 "x"
-#endif
-#define SCNd64 _PFX_64 "d"
-#define SCNu64 _PFX_64 "u"
-#pragma intrinsic(_InterlockedIncrement)
-#pragma intrinsic(_InterlockedDecrement)
-#pragma intrinsic(_InterlockedExchangeAdd)
-#define InterlockedIncrement _InterlockedIncrement
-#define InterlockedDecrement _InterlockedDecrement
-#define InterlockedExchangeAdd _InterlockedExchangeAdd
-#define InterlockedAdd _InterlockedExchangeAdd
-#define strtoll _strtoi64
-#define strtoull _strtoui64
+#include <io.h>
+#include <fcntl.h>
 
 
 /**
@@ -175,7 +147,9 @@ static RD_INLINE RD_UNUSED const char *rd_strerror(int err) {
 /**
  * Atomics
  */
+#ifndef __cplusplus
 #include "rdatomic.h"
+#endif
 
 
 /**
@@ -187,9 +161,6 @@ static RD_INLINE RD_UNUSED const char *rd_strerror(int err) {
  * 'retry': if true, retry if sleep is interrupted (because of signal)
  */
 #define rd_usleep(usec,terminate)  Sleep((usec) / 1000)
-
-
-
 
 
 /**
@@ -205,7 +176,7 @@ int rd_gettimeofday (struct timeval *tv, struct timezone *tz) {
 	SystemTimeToFileTime(&st, &ft);
 	d.HighPart = ft.dwHighDateTime;
 	d.LowPart  = ft.dwLowDateTime;
-	tv->tv_sec  = (long)((d.QuadPart - 116444736000000000ll) / 10000000L);
+	tv->tv_sec  = (long)((d.QuadPart - 116444736000000000llu) / 10000000L);
 	tv->tv_usec = (long)(st.wMilliseconds * 1000);
 
 	return 0;
@@ -219,3 +190,59 @@ int rd_gettimeofday (struct timeval *tv, struct timezone *tz) {
  * Empty struct initializer
  */
 #define RD_ZERO_INIT  {0}
+
+#ifndef __cplusplus
+/**
+ * Sockets, IO
+ */
+
+/**
+ * @brief Set socket to non-blocking
+ * @returns 0 on success or -1 on failure (see rd_kafka_socket_errno)
+ */
+static RD_UNUSED int rd_fd_set_nonblocking (int fd) {
+        int on = 1;
+        if (ioctlsocket(fd, FIONBIO, &on) == SOCKET_ERROR)
+                return (int)WSAGetLastError();
+        return 0;
+}
+
+/**
+ * @brief Create non-blocking pipe
+ * @returns 0 on success or errno on failure
+ */
+static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
+        HANDLE h[2];
+        int i;
+
+        if (!CreatePipe(&h[0], &h[1], NULL, 0))
+                return (int)GetLastError();
+        for (i = 0 ; i < 2 ; i++) {
+                DWORD mode = PIPE_NOWAIT;
+                /* Set non-blocking */
+                if (!SetNamedPipeHandleState(h[i], &mode, NULL, NULL)) {
+                        CloseHandle(h[0]);
+                        CloseHandle(h[1]);
+                        return (int)GetLastError();
+                }
+
+                /* Open file descriptor for handle */
+                fds[i] = _open_osfhandle((intptr_t)h[i],
+                                         i == 0 ?
+                                         O_RDONLY | O_BINARY :
+                                         O_WRONLY | O_BINARY);
+
+                if (fds[i] == -1) {
+                        CloseHandle(h[0]);
+                        CloseHandle(h[1]);
+                        return (int)GetLastError();
+                }
+        }
+        return 0;
+}
+
+#define rd_read(fd,buf,sz) _read(fd,buf,sz)
+#define rd_write(fd,buf,sz) _write(fd,buf,sz)
+#define rd_close(fd) closesocket(fd)
+
+#endif /* !__cplusplus*/
