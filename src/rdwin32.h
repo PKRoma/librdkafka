@@ -33,7 +33,8 @@
 
 
 #include <stdlib.h>
-//#include <inttypes.h> // BILBO bad merge call inttypes.h 
+// #include <inttypes.h> // VS2012 does not know about inttypes.h 
+#include <stdint.h>      // VS2012 does know about stdint.h for int64_t etc, which it cannot get from inttypes.h.
 #include <sys/types.h>
 #include <time.h>
 #include <assert.h>
