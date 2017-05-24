@@ -33,7 +33,7 @@
 
 
 #include <stdlib.h>
-#include <inttypes.h>
+//#include <inttypes.h> // BILBO bad merge call inttypes.h 
 #include <sys/types.h>
 #include <time.h>
 #include <assert.h>
