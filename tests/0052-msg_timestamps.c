@@ -109,11 +109,13 @@ consume_msgs_verify_timestamps (const char *topic, int partition,
                             topic, &mv,
                             TEST_MSGVER_RANGE|
                             TEST_MSGVER_BY_MSGID|TEST_MSGVER_BY_TIMESTAMP,
-                            (struct test_mv_vs){ .msg_base = 0,
-                                            .exp_cnt = msgcnt,
-                                            .timestamp_min = exp_timestamp->min,
-                                            .timestamp_max = exp_timestamp->max
-                                            });
+                            /*.msg_base = */0,
+                            /*.exp_cnt = */msgcnt,
+							/*.msgid_min = */0,
+							/*.msgid_max = */0,
+                            /*.timestamp_min = */exp_timestamp->min,
+                            /*.timestamp_max = */exp_timestamp->max
+                                            );
 
         test_msgver_clear(&mv);
 }

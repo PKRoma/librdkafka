@@ -48,8 +48,8 @@ static rd_avl_node_t *rd_avl_balance_node (rd_avl_node_t *ran);
 static rd_avl_node_t *rd_avl_rotate (rd_avl_node_t *ran, rd_avl_dir_t dir) {
         rd_avl_node_t *n;
         static const rd_avl_dir_t odirmap[] = { /* opposite direction map */
-                [RD_AVL_RIGHT] = RD_AVL_LEFT,
-                [RD_AVL_LEFT]  = RD_AVL_RIGHT
+                /*[RD_AVL_LEFT]  = */RD_AVL_RIGHT,
+                /*[RD_AVL_RIGHT] = */RD_AVL_LEFT
         };
         const int odir = odirmap[dir];
 

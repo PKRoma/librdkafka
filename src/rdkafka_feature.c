@@ -390,7 +390,7 @@ rd_kafka_ApiVersions_copy (const struct rd_kafka_ApiVersion *src,
                            size_t src_cnt,
                            struct rd_kafka_ApiVersion **dstp,
                            size_t *dst_cntp) {
-        *dstp = struct rd_kafka_ApiVersion *)rd_memdup(src, sizeof(*src) * src_cnt);
+        *dstp = (struct rd_kafka_ApiVersion *)rd_memdup(src, sizeof(*src) * src_cnt);
         *dst_cntp = src_cnt;
         qsort(*dstp, *dst_cntp, sizeof(**dstp), rd_kafka_ApiVersion_key_cmp);
 }

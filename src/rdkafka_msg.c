@@ -255,8 +255,9 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
         va_list ap;
         rd_kafka_msg_t s_rkm = {
                 /* Message defaults */
-                .rkm_partition = RD_KAFKA_PARTITION_UA,
-                .rkm_timestamp = 0, /* current time */
+				{ RD_KAFKA_RESP_ERR_NO_ERROR, NULL, /*.rkm_partition =*/ RD_KAFKA_PARTITION_UA },
+				{ NULL, NULL }, 0,
+                /*.rkm_timestamp =*/ 0, /* current time */
         };
         rd_kafka_msg_t *rkm = &s_rkm;
         rd_kafka_vtype_t vtype;

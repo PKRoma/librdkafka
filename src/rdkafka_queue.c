@@ -739,31 +739,31 @@ size_t rd_kafka_queue_length (rd_kafka_queue_t *rkqu) {
 /**
  * @brief Enable or disable(fd==-1) fd-based wake-ups for queue
  */
-void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
-				     				 const void *payload, size_t size) {
-	struct rd_kafka_q_io *qio;
+void rd_kafka_q_io_event_enable (rd_kafka_q_t *rkq, int fd,
+                                 const void *payload, size_t size) {
+        struct rd_kafka_q_io *qio;
 
-	if (fd != -1) {
-		qio = (struct rd_kafka_q_io *)rd_malloc(sizeof(*qio) + size);
-		qio->fd = fd;
-		qio->size = size;
-		qio->payload = (void *)(qio+1);
-		memcpy(qio->payload, payload, size);
-	}
+        if (fd != -1) {
+                qio = rd_malloc(sizeof(*qio) + size);
+                qio->fd = fd;
+                qio->size = size;
+                qio->payload = (void *)(qio+1);
+                memcpy(qio->payload, payload, size);
+        }
 
-	mtx_lock(&rkq->rkq_lock);
-	if (rkq->rkq_qio) {
-		rd_free(rkq->rkq_qio);
-		rkq->rkq_qio = NULL;
-	}
+        mtx_lock(&rkq->rkq_lock);
+        if (rkq->rkq_qio) {
+                rd_free(rkq->rkq_qio);
+                rkq->rkq_qio = NULL;
+        }
 
-	if (fd != -1) {
-		rkq->rkq_qio = qio;
-	}
+        if (fd != -1) {
+                rkq->rkq_qio = qio;
+        }
 
-	mtx_unlock(&rkq->rkq_lock);
+        mtx_unlock(&rkq->rkq_lock);
+
 }
-
 void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
                                      const void *payload, size_t size) {
         rd_kafka_q_io_event_enable(rkqu->rkqu_q, fd, payload, size);
@@ -789,7 +789,7 @@ rd_kafka_resp_err_t rd_kafka_q_wait_result (rd_kafka_q_t *rkq, int timeout_ms) {
         return err;
 }
 
-
+/**
  * Apply \p callback on each op in queue.
  * If the callback wishes to remove the rko it must do so using
  * using rd_kafka_op_deq0().

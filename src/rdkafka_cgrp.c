@@ -2571,7 +2571,7 @@ static void rd_kafka_cgrp_timeout_scan (rd_kafka_cgrp_t *rkcg, rd_ts_t now) {
                                 rd_kafka_op_offset_commit_timeout_check,
                                 &ofc_state);
 
-        RD_LIST_FOREACH(rko, &ofc_state.expired, i)
+        RD_LIST_FOREACH(rko, &ofc_state.expired, i, rd_kafka_op_t)
                 rd_kafka_cgrp_op_handle_OffsetCommit(
                         rkcg->rkcg_rk, NULL,
                         RD_KAFKA_RESP_ERR__WAIT_COORD,

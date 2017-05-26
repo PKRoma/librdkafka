@@ -128,7 +128,6 @@ struct test {
         FILE   *stats_fp;
 	int64_t timeout;
         enum test_state state;
-};
 
 #if WITH_SOCKEM
         rd_list_t sockets;
@@ -380,12 +379,13 @@ int test_msgver_verify_part0 (const char *func, int line, const char *what,
 				 what,mv,flags,topic,partition,msg_base,exp_cnt)
 
 int test_msgver_verify0 (const char *func, int line, const char *what,
-			 test_msgver_t *mv, int flags, struct test_mv_vs vs);
+			 test_msgver_t *mv, int flags,
+			 int msgbase, int expcnt,
+			 int msgid_min, int msgid_max,
+			 int64_t timestamp_min, int64_t timestamp_max);
 #define test_msgver_verify(what,mv,flags,msgbase,expcnt)		\
 	test_msgver_verify0(__FUNCTION__,__LINE__,			\
-			    what,mv,flags,                              \
-                            (struct test_mv_vs){.msg_base = msgbase,   \
-                                            .exp_cnt = expcnt})
+			    what,mv,flags,msgbase,expcnt,0,0,0,0)
 
 
 rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf);

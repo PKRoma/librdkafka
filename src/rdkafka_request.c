@@ -1431,7 +1431,7 @@ rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
                 rkbuf->rkbuf_u.Metadata.topics =
                         rd_list_copy(topics, rd_list_string_copy, NULL);
 
-                RD_LIST_FOREACH(topic, topics, i)
+                RD_LIST_FOREACH(topic, topics, i, char)
                         rd_kafka_buf_write_str(rkbuf, topic, -1);
 
         }

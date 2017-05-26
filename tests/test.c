@@ -133,14 +133,14 @@ _TEST_DECL(0049_consume_conn_close);
 _TEST_DECL(0050_subscribe_adds);
 _TEST_DECL(0051_assign_adds);
 _TEST_DECL(0052_msg_timestamps);
-_TEST_DECL(0053_stats_cb);
-_TEST_DECL(0054_offset_time);
+// _TEST_DECL(0053_stats_cb);			// C++ testing not supported in C API VS2012 backport
+// _TEST_DECL(0054_offset_time);		// C++ testing not supported in C API VS2012 backport
 _TEST_DECL(0055_producer_latency);
 _TEST_DECL(0056_balanced_group_mt);
-_TEST_DECL(0057_invalid_topic);
-_TEST_DECL(0058_log);
-_TEST_DECL(0060_op_prio);
-_TEST_DECL(0061_consumer_lag);
+// _TEST_DECL(0057_invalid_topic);		// C++ testing not supported in C API VS2012 backport
+// _TEST_DECL(0058_log);				// C++ testing not supported in C API VS2012 backport
+// _TEST_DECL(0060_op_prio);			// C++ testing not supported in C API VS2012 backport
+// _TEST_DECL(0061_consumer_lag);		// C++ testing not supported in C API VS2012 backport
 
 
 /**
@@ -202,14 +202,14 @@ struct test tests[] = {
         _TEST(0050_subscribe_adds, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0051_assign_adds, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0052_msg_timestamps, 0, TEST_BRKVER(0,10,0,0)),
-        _TEST(0053_stats_cb, TEST_F_LOCAL),
-        _TEST(0054_offset_time, 0, TEST_BRKVER(0,10,0,0)),
+        // _TEST(0053_stats_cb, TEST_F_LOCAL),					// C++ testing not supported in C API VS2012 backport
+        // _TEST(0054_offset_time, 0, TEST_BRKVER(0,10,0,0)),	// C++ testing not supported in C API VS2012 backport
         _TEST(0055_producer_latency, TEST_F_KNOWN_ISSUE_WIN32),
         _TEST(0056_balanced_group_mt, 0, TEST_BRKVER(0,9,0,0)),
-        _TEST(0057_invalid_topic, 0, TEST_BRKVER(0,9,0,0)),
-        _TEST(0058_log, TEST_F_LOCAL),
-        _TEST(0060_op_prio, 0, TEST_BRKVER(0,9,0,0)),
-        _TEST(0061_consumer_lag, 0),
+        // _TEST(0057_invalid_topic, 0, TEST_BRKVER(0,9,0,0)),	// C++ testing not supported in C API VS2012 backport
+        // _TEST(0058_log, TEST_F_LOCAL),						// C++ testing not supported in C API VS2012 backport
+        // _TEST(0060_op_prio, 0, TEST_BRKVER(0,9,0,0)),		// C++ testing not supported in C API VS2012 backport
+        // _TEST(0061_consumer_lag, 0),							// C++ testing not supported in C API VS2012 backport
         { NULL }
 };
 
@@ -2481,7 +2481,10 @@ int test_msgver_verify_part0 (const char *func, int line, const char *what,
  */
 int test_msgver_verify0 (const char *func, int line, const char *what,
 			 test_msgver_t *mv,
-			 int flags, struct test_mv_vs vs) {
+			 int flags, int msg_base, int exp_cnt,
+			 int msgid_min, int msgid_max,
+			 int64_t timestamp_min, int64_t timestamp_max) {
+	struct test_mv_vs vs = { msg_base, exp_cnt, msgid_min, msgid_max, timestamp_min, timestamp_max };
 	int fails = 0;
 
 	TEST_SAY("%s:%d: %s: Verifying %d received messages (flags 0x%x): "

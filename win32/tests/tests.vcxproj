@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -90,11 +90,9 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <PrecompiledHeader>
-      </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>LIBRDKAFKA_STATICLIB;WIN32;_DEBUG;_CONSOLE;_LIB;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>$(SolutionDir)\..\src;$(SolutionDir)\..\src-cpp</AdditionalIncludeDirectories>
       <ShowIncludes>false</ShowIncludes>
@@ -227,22 +225,14 @@
     <ClCompile Include="..\..\tests\0050-subscribe_adds.c" />
     <ClCompile Include="..\..\tests\0051-assign_adds.c" />
     <ClCompile Include="..\..\tests\0052-msg_timestamps.c" />
-    <ClCompile Include="..\..\tests\0053-stats_cb.cpp" />
-    <ClCompile Include="..\..\tests\0054-offset_time.cpp" />
     <ClCompile Include="..\..\tests\0055-producer_latency.c" />
     <ClCompile Include="..\..\tests\0056-balanced_group_mt.c" />
-    <ClCompile Include="..\..\tests\0057-invalid_topic.cpp" />
-    <ClCompile Include="..\..\tests\0058-log.cpp" />
-    <ClCompile Include="..\..\tests\0060-op_prio.cpp" />
-    <ClCompile Include="..\..\tests\0061-consumer_lag.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
-    <ClCompile Include="..\..\tests\testcpp.cpp" />
     <ClCompile Include="..\..\src\tinycthread.c" />
     <ClCompile Include="..\..\src\rdlist.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\tests\test.h" />
-    <ClInclude Include="..\..\tests\testcpp.h" />
     <ClInclude Include="..\..\tests\testshared.h" />
   </ItemGroup>
   <ItemGroup>

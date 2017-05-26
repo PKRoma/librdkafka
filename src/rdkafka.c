@@ -2356,7 +2356,7 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
         state.results = rd_kafka_topic_partition_list_new(offsets->cnt);
 
         /* For each leader send a request for its partitions */
-        RD_LIST_FOREACH(leader, &leaders, i) {
+        RD_LIST_FOREACH(leader, &leaders, i, struct rd_kafka_partition_leader) {
                 state.wait_reply++;
                 rd_kafka_OffsetRequest(leader->rkb, leader->partitions, 1,
                                        RD_KAFKA_REPLYQ(rkq, 0),

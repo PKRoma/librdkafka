@@ -246,7 +246,7 @@ int16_t rd_kafka_broker_ApiVersion_supported (rd_kafka_broker_t *rkb,
                                               int16_t ApiKey,
                                               int16_t minver, int16_t maxver,
                                               int *featuresp) {
-        struct rd_kafka_ApiVersion skel = { .ApiKey = ApiKey };
+        struct rd_kafka_ApiVersion skel = { ApiKey, 0, 0 };
         struct rd_kafka_ApiVersion ret, *retp;
 
         rd_kafka_broker_lock(rkb);
@@ -1663,7 +1663,7 @@ static RD_INLINE int
 rd_kafka_broker_request_supported (rd_kafka_broker_t *rkb,
                                    rd_kafka_buf_t *rkbuf) {
         struct rd_kafka_ApiVersion skel = {
-                .ApiKey = rkbuf->rkbuf_reqhdr.ApiKey
+                rkbuf->rkbuf_reqhdr.ApiKey, 0, 0
         };
         struct rd_kafka_ApiVersion *ret;
 
@@ -2367,7 +2367,7 @@ rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc,
         int i;
 	/* Required by Kafka */
         const LZ4F_preferences_t prefs =
-                { .frameInfo = { .blockMode = LZ4F_blockIndependent } };
+                { { LZ4F_default, LZ4F_blockIndependent } };
 
         *outbuf = NULL;
 

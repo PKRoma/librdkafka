@@ -42,7 +42,33 @@
 #include <Winsock2.h>  /* for struct timeval */
 #include <io.h>
 #include <fcntl.h>
-
+// VS2012 cannot get these from inttypes.h so provide them here.
+#define _PFX_32 "l"
+#define _PFX_64 "ll"
+#define PRId32 _PFX_32 "d"
+#define PRIu32 _PFX_32 "u"
+#define PRIx32 _PFX_32 "x"
+#ifndef PRId64
+#define PRId64 _PFX_64 "d"
+#endif
+#ifndef PRIu64
+#define PRIu64 _PFX_64 "u"
+#endif
+#ifndef PRIx64
+#define PRIx64 _PFX_64 "x"
+#endif
+#define SCNd64 _PFX_64 "d"
+#define SCNu64 _PFX_64 "u"
+//#pragma intrinsic(_InterlockedIncrement)
+//#pragma intrinsic(_InterlockedDecrement)
+//#pragma intrinsic(_InterlockedExchangeAdd)
+//#define InterlockedIncrement _InterlockedIncrement
+//#define InterlockedDecrement _InterlockedDecrement
+//#define InterlockedExchangeAdd _InterlockedExchangeAdd
+//#define InterlockedAdd _InterlockedExchangeAdd
+#define strtoll _strtoi64
+#define strtoull _strtoui64
+// VS2012 end of missing inttypes.h provision
 
 /**
  * Types
@@ -177,7 +203,7 @@ int rd_gettimeofday (struct timeval *tv, struct timezone *tz) {
 	SystemTimeToFileTime(&st, &ft);
 	d.HighPart = ft.dwHighDateTime;
 	d.LowPart  = ft.dwLowDateTime;
-	tv->tv_sec  = (long)((d.QuadPart - 116444736000000000llu) / 10000000L);
+	tv->tv_sec  = (long)((d.QuadPart - 116444736000000000ll) / 10000000L);
 	tv->tv_usec = (long)(st.wMilliseconds * 1000);
 
 	return 0;

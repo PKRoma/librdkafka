@@ -262,7 +262,7 @@ void rd_list_apply (rd_list_t *rl,
         void *elem;
         int i;
 
-        RD_LIST_FOREACH(elem, rl, i) {
+        RD_LIST_FOREACH(elem, rl, i, void) {
                 if (!cb(elem, opaque)) {
                         rd_list_remove0(rl, i);
                         i--;
@@ -302,6 +302,6 @@ void rd_list_copy_to (rd_list_t *dst, const rd_list_t *src,
         if (!copy_cb)
                 copy_cb = rd_list_nocopy_ptr;
 
-        RD_LIST_FOREACH(elem, src, i)
+        RD_LIST_FOREACH(elem, src, i, void)
                 rd_list_add(dst, copy_cb(elem, opaque));
 }

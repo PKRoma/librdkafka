@@ -154,7 +154,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  1, 1000000, 1000000 },
         { _RK_GLOBAL, "max.in.flight", _RK_C_ALIAS, 0,
           "",
-		  0, 0, 0 "max.in.flight.requests.per.connection" },
+		  0, 0, 0, "max.in.flight.requests.per.connection" },
 	{ _RK_GLOBAL, "metadata.request.timeout.ms", _RK_C_INT,
 	  _RK(metadata_request_timeout_ms),
 	  "Non-topic request timeout in milliseconds. "
@@ -434,16 +434,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	 "SASL mechanism to use for authentication. "
 	 "Supported: GSSAPI, PLAIN. "
 	 "**NOTE**: Despite the name only one mechanism must be configured.",
-	 .sdef = "GSSAPI",
-	 .validate = rd_kafka_conf_validate_single },
+	 0, 0, 0, "GSSAPI",
+	 0, { { 0, NULL } }, rd_kafka_conf_validate_single },
 	{ _RK_GLOBAL, "sasl.kerberos.service.name", _RK_C_STR,
 	  _RK(sasl.service_name),
 	  "Kerberos principal name that Kafka runs as.",
-	  .sdef = "kafka" },
+	  0, 0, 0, "kafka" },
 	{ _RK_GLOBAL, "sasl.kerberos.principal", _RK_C_STR,
 	  _RK(sasl.principal),
 	  "This client's Kerberos principal name.",
-	  .sdef = "kafkaclient" },
+	  0, 0, 0, "kafkaclient" },
 #ifndef _MSC_VER
 	{ _RK_GLOBAL, "sasl.kerberos.kinit.cmd", _RK_C_STR,
 	  _RK(sasl.kinit_cmd),
