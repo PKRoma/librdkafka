@@ -434,7 +434,7 @@ int rd_kafka_metadata_cache_hint (rd_kafka_t *rk,
 
         RD_LIST_FOREACH(topic, topics, i, const char) {
                 rd_kafka_metadata_topic_t mtopic = {
-					/*.topic = */(char *)topic, 0, { 0 }, 
+					/*.topic = */(char *)topic, 0, NULL, 
                     /*.err = */RD_KAFKA_RESP_ERR__WAIT_CACHE
                 };
                 const struct rd_kafka_metadata_cache_entry *rkmce;

@@ -37,6 +37,7 @@
 #include <inttypes.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <sys/socket.h>		// Necessary addition to get Linux build
 
 /**
 * Types
