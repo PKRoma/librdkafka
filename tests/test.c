@@ -1130,7 +1130,7 @@ int main(int argc, char **argv) {
 #ifndef _MSC_VER
         signal(SIGINT, test_sig_term);
 #endif
-        tests_to_run = test_getenv("TESTS", NULL);
+        tests_to_run = test_getenv("TESTS", "0033");
         test_broker_version_str = test_getenv("TEST_KAFKA_VERSION",
                                               test_broker_version_str);
         test_git_version = test_getenv("RDKAFKA_GITVER", "HEAD");
