@@ -463,7 +463,7 @@ void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage) {
 
 rd_kafka_message_t *rd_kafka_message_new (void) {
         rd_kafka_msg_t *rkm = (rd_kafka_msg_t *)rd_calloc(1, sizeof(*rkm));
-        return (rd_kafka_message_t *)rkm; // BILBO: WTF? why do we calloc() a rd_kafka_msg_t but return a rd_kafka_message_t? This is specific logic from upstream.
+        return (rd_kafka_message_t *)rkm;
 }
 
 

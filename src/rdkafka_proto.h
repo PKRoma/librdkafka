@@ -96,8 +96,6 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 				/*[RD_KAFKAP_Metadata] =*/ "Metadata",
 				/*[RD_KAFKAP_LeaderAndIsr] =*/ "LeaderAndIsr",
 				/*[RD_KAFKAP_StopReplica] =*/ "StopReplica",
-				"",
-				"",
 				/*[RD_KAFKAP_OffsetCommit] =*/ "OffsetCommit",
 				/*[RD_KAFKAP_OffsetFetch] =*/ "OffsetFetch",
 				/*[RD_KAFKAP_GroupCoordinator] =*/"GroupCoordinator",
@@ -109,8 +107,8 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 				/*[RD_KAFKAP_ListGroups] =*/ "ListGroups",
 				/*[RD_KAFKAP_SaslHandshake] =*/ "SaslHandshake",
 				/*[RD_KAFKAP_ApiVersion] =*/ "ApiVersion",
-                /*[RD_KAFKAP_CreateTopics] =*/ "CreateTopics", // BILBO: New entry, check index
-                /*[RD_KAFKAP_DeleteTopics] =*/ "DeleteTopics", // BILBO: New entry, check index
+                /*[RD_KAFKAP_CreateTopics] =*/ "CreateTopics",
+                /*[RD_KAFKAP_DeleteTopics] =*/ "DeleteTopics",
 
 		};
 		static RD_TLS char ret[32];

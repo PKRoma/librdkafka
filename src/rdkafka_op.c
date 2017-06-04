@@ -47,7 +47,6 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 "REPLY:CONSUMER_ERR",
                 "REPLY:DR",
                 "REPLY:STATS",
-                "REPLY:METADATA_REQ",
                 "REPLY:OFFSET_COMMIT",
 		"REPLY:NODE_UPDATE",
                 "REPLY:XMIT_BUF",
@@ -68,9 +67,10 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 "REPLY:GET_SUBSCRIPTION",
                 "REPLY:GET_ASSIGNMENT",
 		"REPLY:THROTTLE",
-                "REPLY:CALLBACK",
 		"REPLY:NAME",
-		"REPLY:LOG"		// BILBO: New entry - check index
+		"REPLY:OFFSET_RESET",
+		"REPLY:METADATA",
+		"REPLY:LOG"
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -160,7 +160,6 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
 		/*[RD_KAFKA_OP_CONSUMER_ERR] =*/ sizeof(rko->rko_u.err),
 		/*[RD_KAFKA_OP_DR] =*/ sizeof(rko->rko_u.dr),
 		/*[RD_KAFKA_OP_STATS] =*/ sizeof(rko->rko_u.stats),
-		/*[RD_KAFKA_OP_METADATA_REQ] =*/ sizeof(rko->rko_u.metadata),
 		/*[RD_KAFKA_OP_OFFSET_COMMIT] =*/ sizeof(rko->rko_u.offset_commit),
 		/*[RD_KAFKA_OP_NODE_UPDATE] =*/ sizeof(rko->rko_u.node),
 		/*[RD_KAFKA_OP_XMIT_BUF] =*/ sizeof(rko->rko_u.xbuf),
@@ -183,7 +182,8 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
 		/*[RD_KAFKA_OP_THROTTLE] =*/ sizeof(rko->rko_u.throttle),
 		/*[RD_KAFKA_OP_NAME] =*/ sizeof(rko->rko_u.name),
 		/*[RD_KAFKA_OP_OFFSET_RESET] =*/ sizeof(rko->rko_u.offset_reset),
-		/*[RD_KAFKA_OP_LOG] =*/ sizeof(rko->rko_u.log),	// BILBO: New entry, check index
+		/*[RD_KAFKA_OP_METADATA] =*/ sizeof(rko->rko_u.metadata),
+		/*[RD_KAFKA_OP_LOG] =*/ sizeof(rko->rko_u.log),
 	};
 	size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 

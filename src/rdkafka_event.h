@@ -40,7 +40,6 @@ rd_kafka_event_type_t rd_kafka_op2event (rd_kafka_op_type_t optype) {
 		/*[RD_KAFKA_OP_CONSUMER_ERR] =*/ RD_KAFKA_EVENT_ERROR,
 		/*[RD_KAFKA_OP_DR] =*/ RD_KAFKA_EVENT_DR,
 		RD_KAFKA_EVENT_NONE,
-		RD_KAFKA_EVENT_NONE,
 		/*[RD_KAFKA_OP_OFFSET_COMMIT] =*/ RD_KAFKA_EVENT_OFFSET_COMMIT,
 		RD_KAFKA_EVENT_NONE,
 		RD_KAFKA_EVENT_NONE,
@@ -63,7 +62,8 @@ rd_kafka_event_type_t rd_kafka_op2event (rd_kafka_op_type_t optype) {
 		RD_KAFKA_EVENT_NONE,
 		RD_KAFKA_EVENT_NONE,
 		RD_KAFKA_EVENT_NONE,
-		/*[RD_KAFKA_OP_LOG] =*/ RD_KAFKA_EVENT_LOG // BILBO: New entry - check offset
+		RD_KAFKA_EVENT_NONE,
+		/*[RD_KAFKA_OP_LOG] =*/ RD_KAFKA_EVENT_LOG
 	};
 
 	return map[(int)optype & ~RD_KAFKA_OP_FLAGMASK];

@@ -482,21 +482,17 @@ RD_KAFKA_REPLYQ(rd_kafka_q_t *Q, int32_t VERSION) {
 #endif
 
 /* Construct temporary on-stack replyq for indicating no replyq. */
-// BILBO PETER START
 static RD_INLINE RD_UNUSED rd_kafka_replyq_t
 RD_KAFKA_NO_REPLYQ0(int32_t VERSION) {
+#if ENABLE_DEVEL
+	rd_kafka_replyq_t replyq = {NULL, VERSION, NULL};
+#else
 	rd_kafka_replyq_t replyq = {NULL, VERSION};
+#endif
 	return replyq;
 }
 #define RD_KAFKA_NO_REPLYQ  RD_KAFKA_NO_REPLYQ0(0)
-// BILBO PETER END
-// BILBO UPSTREAM START
-//#if ENABLE_DEVEL
-//#define RD_KAFKA_NO_REPLYQ (rd_kafka_replyq_t){NULL, 0, NULL}
-//#else
-//#define RD_KAFKA_NO_REPLYQ (rd_kafka_replyq_t){NULL, 0}
-//#endif
-// BILBO UPSTREAM END
+
 /**
  * Set up replyq.
  * Q refcnt is increased.
