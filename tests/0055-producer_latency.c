@@ -78,7 +78,7 @@ static int verify_latency (struct latconf *latconf) {
         float avg;
         int fails = 0;
         double ext_overhead = latconf->rtt +
-                5.0 /* broker ProduceRequest handling time, maybe */;
+                6.0 /* broker ProduceRequest handling time, maybe. changed from 5 to 6 for backport tests. */;
 
         ext_overhead *= test_timeout_multiplier;
 

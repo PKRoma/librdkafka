@@ -377,7 +377,8 @@ static int do_test (const char *assignor) {
 			rd_strdup(tsprintf("%s: broken regex (no matches)",
 						   assignor)),
 			{ "^.*[0", NULL },
-			{ NULL }
+			{ NULL },
+			RD_KAFKA_RESP_ERR__INVALID_ARG
 		};
 
 		fails += test_subscribe(rk, &expect);
