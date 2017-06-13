@@ -179,7 +179,7 @@ static int rd_kafka_sasl_sspi_continue (rd_kafka_transport_t *rktrans,
         }
 
         sr = InitializeSecurityContext(
-                state->cred, state->ctx, state->principal, // NOTE: This gives a warning because state->principal is w_char*, but Michael doesn't care.
+                state->cred, state->ctx, (SEC_CHAR *)state->principal, // NOTE: This gave a warning because state->principal is w_char*, but Michael doesn't care.
                 RD_KAFKA_SASL_SSPI_CTX_ATTRS |
                 (state->ctx ? 0 : ISC_REQ_MUTUAL_AUTH | ISC_REQ_IDENTIFY),
                 0, SECURITY_NATIVE_DREP,

@@ -4890,6 +4890,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
     rd_atomic64_init(&rkb->rkb_c.rx_partial, 0);
     rd_atomic64_init(&rkb->rkb_c.zbuf_grow, 0);
     rd_atomic64_init(&rkb->rkb_c.buf_grow, 0);
+    rd_atomic64_init(&rkb->rkb_c.wakeups, 0);
 #ifndef _MSC_VER
         /* Block all signals in newly created thread.
          * To avoid race condition we block all signals in the calling
