@@ -149,7 +149,7 @@ struct rd_kafka_ApiVersion {
  * @brief ApiVersion.ApiKey comparator.
  */
 static RD_UNUSED int rd_kafka_ApiVersion_key_cmp (const void *_a, const void *_b) {
-	const struct rd_kafka_ApiVersion *a = (const struct rd_kafka_ApiVersion *)_a, *b = (const struct rd_kafka_ApiVersion *)_b;
+	const struct rd_kafka_ApiVersion *a = _a, *b = _b;
 
 	return a->ApiKey - b->ApiKey;
 }
@@ -226,7 +226,7 @@ rd_kafkap_str_t *rd_kafkap_str_new (const char *str, int len) {
 	else if (len == -1)
 		len = str ? (int)strlen(str) : RD_KAFKAP_STR_LEN_NULL;
 
-	kstr = (rd_kafkap_str_t *)rd_malloc(sizeof(*kstr) + 2 +
+	kstr = rd_malloc(sizeof(*kstr) + 2 +
 			 (len == RD_KAFKAP_STR_LEN_NULL ? 0 : len + 1));
 	kstr->len = len;
 
@@ -344,7 +344,7 @@ rd_kafkap_bytes_t *rd_kafkap_bytes_new (const char *bytes, int32_t len) {
 	if (!bytes)
 		len = RD_KAFKAP_BYTES_LEN_NULL;
 
-	kbytes = (rd_kafkap_bytes_t *)rd_malloc(sizeof(*kbytes) + 4 +
+	kbytes = rd_malloc(sizeof(*kbytes) + 4 +
 			 (len == RD_KAFKAP_BYTES_LEN_NULL ? 0 : len));
 	kbytes->len = len;
 

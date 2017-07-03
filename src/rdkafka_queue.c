@@ -54,7 +54,7 @@ void rd_kafka_q_init (rd_kafka_q_t *rkq, rd_kafka_t *rk) {
  * Allocate a new queue and initialize it.
  */
 rd_kafka_q_t *rd_kafka_q_new0 (rd_kafka_t *rk, const char *func, int line) {
-        rd_kafka_q_t *rkq = (rd_kafka_q_t *)rd_malloc(sizeof(*rkq));
+        rd_kafka_q_t *rkq = rd_malloc(sizeof(*rkq));
         rd_kafka_q_init(rkq, rk);
         rkq->rkq_flags |= RD_KAFKA_Q_F_ALLOCATED;
 #if ENABLE_DEVEL
@@ -462,7 +462,7 @@ void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage) {
 
 
 rd_kafka_message_t *rd_kafka_message_new (void) {
-        rd_kafka_msg_t *rkm = (rd_kafka_msg_t *)rd_calloc(1, sizeof(*rkm));
+        rd_kafka_msg_t *rkm = rd_calloc(1, sizeof(*rkm));
         return (rd_kafka_message_t *)rkm;
 }
 
@@ -655,7 +655,7 @@ void rd_kafka_queue_destroy (rd_kafka_queue_t *rkqu) {
 rd_kafka_queue_t *rd_kafka_queue_new0 (rd_kafka_t *rk, rd_kafka_q_t *rkq) {
 	rd_kafka_queue_t *rkqu;
 
-	rkqu = (rd_kafka_queue_t *)rd_calloc(1, sizeof(*rkqu));
+	rkqu = rd_calloc(1, sizeof(*rkqu));
 
 	rkqu->rkqu_q = rkq;
 	rd_kafka_q_keep(rkq);
@@ -764,6 +764,7 @@ void rd_kafka_q_io_event_enable (rd_kafka_q_t *rkq, int fd,
         mtx_unlock(&rkq->rkq_lock);
 
 }
+
 void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
                                      const void *payload, size_t size) {
         rd_kafka_q_io_event_enable(rkqu->rkqu_q, fd, payload, size);
@@ -788,6 +789,7 @@ rd_kafka_resp_err_t rd_kafka_q_wait_result (rd_kafka_q_t *rkq, int timeout_ms) {
 
         return err;
 }
+
 
 /**
  * Apply \p callback on each op in queue.

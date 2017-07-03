@@ -1150,7 +1150,7 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
  * Main loop for Kafka handler thread.
  */
 static int rd_kafka_thread_main (void *arg) {
-        rd_kafka_t *rk = (rd_kafka_t *)arg;
+        rd_kafka_t *rk = arg;
 	rd_kafka_timer_t tmr_topic_scan = RD_ZERO_INIT;
 	rd_kafka_timer_t tmr_stats_emit = RD_ZERO_INIT;
 	rd_kafka_timer_t tmr_metadata_refresh = RD_ZERO_INIT;
@@ -1264,7 +1264,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	/*
 	 * Set up the handle.
 	 */
-	rk = (rd_kafka_t *)rd_calloc(1, sizeof(*rk));
+	rk = rd_calloc(1, sizeof(*rk));
 
 	rk->rk_type = type;
 
@@ -1465,7 +1465,7 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partition,
 		      const void *key, size_t keylen,
 		      void *msg_opaque) {
 	return rd_kafka_msg_new(rd_kafka_topic_a2i(rkt), partition,
-				msgflags, (char *)payload, len,
+				msgflags, payload, len,
 				key, keylen, msg_opaque);
 }
 
@@ -1756,7 +1756,7 @@ struct consume_ctx {
  */
 static int rd_kafka_consume_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
                                 int cb_type, void *opaque) {
-	struct consume_ctx *ctx = (struct consume_ctx *)opaque;
+	struct consume_ctx *ctx = opaque;
 	rd_kafka_message_t *rkmessage;
 
         if (unlikely(rd_kafka_op_version_outdated(rko, 0))) {
@@ -2115,7 +2115,7 @@ static void rd_kafka_query_wmark_offsets_resp_cb (rd_kafka_t *rk,
 						  rd_kafka_buf_t *rkbuf,
 						  rd_kafka_buf_t *request,
 						  void *opaque) {
-	struct _query_wmark_offsets_state *state = (struct _query_wmark_offsets_state *)opaque;
+	struct _query_wmark_offsets_state *state = opaque;
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_topic_partition_t *rktpar;
 
@@ -2869,7 +2869,7 @@ static void rd_kafka_DescribeGroups_resp_cb (rd_kafka_t *rk,
                                              rd_kafka_buf_t *reply,
                                              rd_kafka_buf_t *request,
                                              void *opaque) {
-        struct list_groups_state *state = (struct list_groups_state *)opaque;
+        struct list_groups_state *state = opaque;
         const int log_decode_errors = 1;
         int cnt;
 
@@ -2890,7 +2890,7 @@ static void rd_kafka_DescribeGroups_resp_cb (rd_kafka_t *rk,
                         /* Grow group array */
                         state->grplist_size *= 2;
                         state->grplist->groups =
-                                (struct rd_kafka_group_info *)rd_realloc(state->grplist->groups,
+                                rd_realloc(state->grplist->groups,
                                            state->grplist_size *
                                            sizeof(*state->grplist->groups));
                 }
@@ -2924,7 +2924,7 @@ static void rd_kafka_DescribeGroups_resp_cb (rd_kafka_t *rk,
 
                 if (MemberCnt > 0)
                         gi->members =
-                                (struct rd_kafka_group_member_info *)rd_malloc(MemberCnt * sizeof(*gi->members));
+                                rd_malloc(MemberCnt * sizeof(*gi->members));
 
                 while (MemberCnt-- > 0) {
                         rd_kafkap_str_t MemberId, ClientId, ClientHost;
@@ -2978,7 +2978,7 @@ static void rd_kafka_ListGroups_resp_cb (rd_kafka_t *rk,
                                          rd_kafka_buf_t *reply,
                                          rd_kafka_buf_t *request,
                                          void *opaque) {
-        struct list_groups_state *state = (struct list_groups_state *)opaque;
+        struct list_groups_state *state = opaque;
         const int log_decode_errors = 1;
         int16_t ErrorCode;
         char **grps;
@@ -3005,7 +3005,7 @@ static void rd_kafka_ListGroups_resp_cb (rd_kafka_t *rk,
         if (cnt == 0 || grpcnt == 0)
                 return;
 
-        grps = (char **)rd_malloc(sizeof(*grps) * grpcnt);
+        grps = rd_malloc(sizeof(*grps) * grpcnt);
 
         while (cnt-- > 0) {
                 rd_kafkap_str_t grp, proto;
@@ -3069,10 +3069,10 @@ rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
 
         state.q = rd_kafka_q_new(rk);
         state.desired_group = group;
-        state.grplist = (struct rd_kafka_group_list *)rd_calloc(1, sizeof(*state.grplist));
+        state.grplist = rd_calloc(1, sizeof(*state.grplist));
         state.grplist_size = group ? 1 : 32;
 
-        state.grplist->groups = (struct rd_kafka_group_info *)rd_malloc(state.grplist_size *
+        state.grplist->groups = rd_malloc(state.grplist_size *
                                           sizeof(*state.grplist->groups));
 
         /* Query each broker for its list of groups */

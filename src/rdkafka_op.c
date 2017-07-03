@@ -187,7 +187,7 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
 	};
 	size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
-	rko = (rd_kafka_op_t *)rd_calloc(1, sizeof(*rko)-sizeof(rko->rko_u)+tsize);
+	rko = rd_calloc(1, sizeof(*rko)-sizeof(rko->rko_u)+tsize);
 	rko->rko_type = type;
 
 #if ENABLE_DEVEL
@@ -362,9 +362,9 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
 				      rd_kafka_resp_err_t err) {
         rd_kafka_op_t *rko;
 
-        rko = rd_kafka_op_new((rd_kafka_op_type_t)(rko_orig->rko_type |
+        rko = rd_kafka_op_new(rko_orig->rko_type |
 			      (rko_orig->rko_op_cb ?
-			       RD_KAFKA_OP_CB : RD_KAFKA_OP_REPLY)));
+			       RD_KAFKA_OP_CB : RD_KAFKA_OP_REPLY));
 	rd_kafka_op_get_reply_version(rko, rko_orig);
 	rko->rko_op_cb   = rko_orig->rko_op_cb;
 	rko->rko_err     = err;

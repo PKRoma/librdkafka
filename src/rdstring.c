@@ -54,13 +54,13 @@ char *rd_string_render (const char *templ,
 	char *buf;
 	size_t of = 0;
 
-	buf = (char *)rd_malloc(size);
+	buf = rd_malloc(size);
 
 #define _remain() (size - of - 1)
 #define _assure_space(SZ) do {				\
 		if (of + (SZ) + 1 >= size) {		\
 			size = (size + (SZ) + 1) * 2;	\
-			buf = (char *)realloc(buf, size);	\
+			buf = realloc(buf, size);	\
 		}					\
 	} while (0)
 	

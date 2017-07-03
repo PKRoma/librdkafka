@@ -1990,7 +1990,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_t *rk,
 					   rd_kafka_buf_t *reply,
 					   rd_kafka_buf_t *request,
 					   void *opaque) {
-	shptr_rd_kafka_toppar_t *s_rktp = (shptr_rd_kafka_toppar_t *)opaque;
+	shptr_rd_kafka_toppar_t *s_rktp = opaque;
         rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
         int64_t offset = RD_KAFKA_OFFSET_INVALID;
 
@@ -3526,7 +3526,7 @@ static char *rd_kafka_snappy_java_decompress (rd_kafka_broker_t *rkb,
 			}
 
 			/* Allocate memory for uncompressed data */
-			outbuf = (char *)rd_malloc(uof);
+			outbuf = rd_malloc(uof);
 			if (unlikely(!outbuf)) {
 				rd_rkb_dbg(rkb, MSG, "SNAPPY",
 					   "Failed to allocate memory for uncompressed "

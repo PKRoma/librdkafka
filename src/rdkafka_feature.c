@@ -314,7 +314,7 @@ rd_kafka_ApiVersion_check (const struct rd_kafka_ApiVersion *apis, size_t api_cn
 			   const struct rd_kafka_ApiVersion *match) {
 	const struct rd_kafka_ApiVersion *api;
 
-	api = (const struct rd_kafka_ApiVersion *)bsearch(match, apis, api_cnt, sizeof(*apis),
+	api = bsearch(match, apis, api_cnt, sizeof(*apis),
 		      rd_kafka_ApiVersion_key_cmp);
 	if (unlikely(!api))
 		return 0;
@@ -390,7 +390,7 @@ rd_kafka_ApiVersions_copy (const struct rd_kafka_ApiVersion *src,
                            size_t src_cnt,
                            struct rd_kafka_ApiVersion **dstp,
                            size_t *dst_cntp) {
-        *dstp = (struct rd_kafka_ApiVersion *)rd_memdup(src, sizeof(*src) * src_cnt);
+        *dstp = rd_memdup(src, sizeof(*src) * src_cnt);
         *dst_cntp = src_cnt;
         qsort(*dstp, *dst_cntp, sizeof(**dstp), rd_kafka_ApiVersion_key_cmp);
 }
