@@ -59,13 +59,6 @@
 #endif
 #define SCNd64 _PFX_64 "d"
 #define SCNu64 _PFX_64 "u"
-//#pragma intrinsic(_InterlockedIncrement)
-//#pragma intrinsic(_InterlockedDecrement)
-//#pragma intrinsic(_InterlockedExchangeAdd)
-//#define InterlockedIncrement _InterlockedIncrement
-//#define InterlockedDecrement _InterlockedDecrement
-//#define InterlockedExchangeAdd _InterlockedExchangeAdd
-//#define InterlockedAdd _InterlockedExchangeAdd
 #define strtoll _strtoi64
 #define strtoull _strtoui64
 // VS2012 end of missing inttypes.h provision
