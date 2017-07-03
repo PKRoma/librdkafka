@@ -492,7 +492,7 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                 for (i = 0 ; i < rd_list_cnt(missing_topics) ; i++)
                         rd_rkb_dbg(rkb, TOPIC, "METADATA", "wanted %s",
                                    (char *)(missing_topics->rl_elems[i]));
-                RD_LIST_FOREACH(topic, missing_topics, i, char) {
+                RD_LIST_FOREACH(topic, missing_topics, i) {
                         shptr_rd_kafka_itopic_t *s_rkt;
 
                         s_rkt = rd_kafka_topic_find(rkb->rkb_rk, topic, 1/*lock*/);

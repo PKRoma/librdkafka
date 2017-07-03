@@ -383,7 +383,7 @@ void rd_kafka_metadata_cache_purge_hints (rd_kafka_t *rk,
         int i;
         int cnt = 0;
 
-        RD_LIST_FOREACH(topic, topics, i, const char) {
+        RD_LIST_FOREACH(topic, topics, i) {
                 struct rd_kafka_metadata_cache_entry *rkmce;
 
                 if (!(rkmce = rd_kafka_metadata_cache_find(rk, topic,
@@ -432,7 +432,7 @@ int rd_kafka_metadata_cache_hint (rd_kafka_t *rk,
         int i;
         int cnt = 0;
 
-        RD_LIST_FOREACH(topic, topics, i, const char) {
+        RD_LIST_FOREACH(topic, topics, i) {
                 rd_kafka_metadata_topic_t mtopic = {
 					/*.topic = */(char *)topic, 0, NULL, 
                     /*.err = */RD_KAFKA_RESP_ERR__WAIT_CACHE
@@ -646,7 +646,7 @@ int rd_kafka_metadata_cache_topics_count_exists (rd_kafka_t *rk,
         int cnt = 0;
         int max_age = -1;
 
-        RD_LIST_FOREACH(topic, topics, i, const char) {
+        RD_LIST_FOREACH(topic, topics, i) {
                 const struct rd_kafka_metadata_cache_entry *rkmce;
                 int age;
 
@@ -685,7 +685,7 @@ int rd_kafka_metadata_cache_topics_filter_hinted (rd_kafka_t *rk,
         int cnt = 0;
 
 
-        RD_LIST_FOREACH(topic, src, i, const char) {
+        RD_LIST_FOREACH(topic, src, i) {
                 const struct rd_kafka_metadata_cache_entry *rkmce;
 
                 rkmce = rd_kafka_metadata_cache_find(rk, topic, 0/*any sort*/);

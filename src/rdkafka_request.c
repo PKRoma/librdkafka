@@ -1069,7 +1069,7 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_kstr(rkbuf, protocol_type);
         rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.enabled_assignor_cnt);
 
-        RD_LIST_FOREACH(rkas, &rk->rk_conf.partition_assignors, i, rd_kafka_assignor_t) {
+        RD_LIST_FOREACH(rkas, &rk->rk_conf.partition_assignors, i) {
                 rd_kafkap_bytes_t *member_metadata;
 		if (!rkas->rkas_enabled)
 			continue;
@@ -1431,7 +1431,7 @@ rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
                 rkbuf->rkbuf_u.Metadata.topics =
                         rd_list_copy(topics, rd_list_string_copy, NULL);
 
-                RD_LIST_FOREACH(topic, topics, i, char)
+                RD_LIST_FOREACH(topic, topics, i)
                         rd_kafka_buf_write_str(rkbuf, topic, -1);
 
         }

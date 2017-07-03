@@ -117,7 +117,7 @@ rd_kafka_consumer_protocol_member_metadata_new (
 
         rd_kafka_buf_write_i16(rkbuf, 0);
         rd_kafka_buf_write_i32(rkbuf, topic_cnt);
-	RD_LIST_FOREACH(tinfo, topics, i, const rd_kafka_topic_info_t)
+	RD_LIST_FOREACH(tinfo, topics, i)
                 rd_kafka_buf_write_str(rkbuf, tinfo->topic, -1);
 	if (userdata)
 		rd_kafka_buf_write_bytes(rkbuf, userdata, userdata_size);

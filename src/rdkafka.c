@@ -177,8 +177,6 @@ int rd_kafka_wait_destroyed (int timeout_ms) {
 	return 0;
 }
 
-
-
 void rd_kafka_log_buf (const rd_kafka_t *rk, int level, const char *fac,
                        const char *buf) {
         if (level > rk->rk_conf.log_level)
@@ -771,7 +769,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                      "Join %d broker thread(s)", rd_list_cnt(&wait_thrds));
 
         /* Join broker threads */
-        RD_LIST_FOREACH(thrd, &wait_thrds, i, thrd_t) {
+        RD_LIST_FOREACH(thrd, &wait_thrds, i) {
                 if (thrd_join(*thrd, NULL) != thrd_success)
                         ;
                 free(thrd);
@@ -1068,7 +1066,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 						   rd_kafka_toppar_s2i(rkt->rkt_p[i]),
 						   i == 0);
 
-                RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, j, shptr_rd_kafka_toppar_t)
+                RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, j)
 			rd_kafka_stats_emit_toppar(&buf, &size, &of,
 						   rd_kafka_toppar_s2i(s_rktp),
 						   i+j == 0);
@@ -2356,7 +2354,7 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
         state.results = rd_kafka_topic_partition_list_new(offsets->cnt);
 
         /* For each leader send a request for its partitions */
-        RD_LIST_FOREACH(leader, &leaders, i, struct rd_kafka_partition_leader) {
+        RD_LIST_FOREACH(leader, &leaders, i) {
                 state.wait_reply++;
                 rd_kafka_OffsetRequest(leader->rkb, leader->partitions, 1,
                                        RD_KAFKA_REPLYQ(rkq, 0),
@@ -2673,7 +2671,7 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
                         rd_kafka_broker_name(rkcg->rkcg_rkb) : "(none)");
 
                 fprintf(fp, "  toppars:\n");
-                RD_LIST_FOREACH(s_rktp, &rkcg->rkcg_toppars, i, shptr_rd_kafka_toppar_t) {
+                RD_LIST_FOREACH(s_rktp, &rkcg->rkcg_toppars, i) {
                         rktp = rd_kafka_toppar_s2i(s_rktp);
                         fprintf(fp, "   %.*s [%"PRId32"] in state %s\n",
                                 RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
@@ -2695,7 +2693,7 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
                                              rd_kafka_toppar_s2i(rkt->rkt_ua));
                 if (rd_list_empty(&rkt->rkt_desp)) {
                         fprintf(fp, "   desired partitions:");
-                        RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp,  i, shptr_rd_kafka_toppar_t)
+                        RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp,  i)
                                 fprintf(fp, " %"PRId32,
                                         rd_kafka_toppar_s2i(s_rktp)->
                                         rktp_partition);

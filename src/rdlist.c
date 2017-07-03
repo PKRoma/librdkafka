@@ -121,7 +121,7 @@ void *rd_list_remove (rd_list_t *rl, void *match_elem) {
         void *elem;
         int i;
 
-        RD_LIST_FOREACH(elem, rl, i, void) {
+        RD_LIST_FOREACH(elem, rl, i) {
                 if (elem == match_elem) {
                         rd_list_remove0(rl, i);
                         return elem;
@@ -137,7 +137,7 @@ void *rd_list_remove_cmp (rd_list_t *rl, void *match_elem,
         void *elem;
         int i;
 
-        RD_LIST_FOREACH(elem, rl, i, void) {
+        RD_LIST_FOREACH(elem, rl, i) {
                 if (match_elem == cmp ||
                     !cmp(elem, match_elem)) {
                         rd_list_remove0(rl, i);
@@ -218,7 +218,7 @@ void *rd_list_find (const rd_list_t *rl, const void *match,
 		return r ? *r : NULL;
 	}
 
-        RD_LIST_FOREACH(elem, rl, i, const void) {
+        RD_LIST_FOREACH(elem, rl, i) {
                 if (!cmp(match, elem))
                         return (void *)elem;
         }
@@ -262,7 +262,7 @@ void rd_list_apply (rd_list_t *rl,
         void *elem;
         int i;
 
-        RD_LIST_FOREACH(elem, rl, i, void) {
+        RD_LIST_FOREACH(elem, rl, i) {
                 if (!cb(elem, opaque)) {
                         rd_list_remove0(rl, i);
                         i--;
@@ -302,6 +302,6 @@ void rd_list_copy_to (rd_list_t *dst, const rd_list_t *src,
         if (!copy_cb)
                 copy_cb = rd_list_nocopy_ptr;
 
-        RD_LIST_FOREACH(elem, src, i, void)
+        RD_LIST_FOREACH(elem, src, i)
                 rd_list_add(dst, copy_cb(elem, opaque));
 }

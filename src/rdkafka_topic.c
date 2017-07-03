@@ -521,7 +521,7 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
 	rktp_ua = rd_kafka_toppar_get(rkt, RD_KAFKA_PARTITION_UA, 0);
 
         /* Propagate notexist errors for desired partitions */
-        RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i, shptr_rd_kafka_toppar_t) {
+        RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i) {
                 rd_kafka_dbg(rkt->rkt_rk, TOPIC, "DESIRED",
                              "%s [%"PRId32"]: "
                              "desired partition does not exist in cluster",
@@ -641,7 +641,7 @@ static void rd_kafka_topic_propagate_notexists (rd_kafka_itopic_t *rkt,
 
 
         /* Notify consumers that the topic doesn't exist. */
-        RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i, shptr_rd_kafka_toppar_t)
+        RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i)
                 rd_kafka_toppar_enq_error(rd_kafka_toppar_s2i(s_rktp), err);
 }
 
@@ -950,7 +950,7 @@ static rd_list_t *rd_kafka_topic_get_all_partitions (rd_kafka_itopic_t *rkt) {
 		rd_list_add(list, rd_kafka_toppar_keep(
 				    rd_kafka_toppar_s2i(rkt->rkt_p[i])));
 
-	RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i, shptr_rd_kafka_toppar_t)
+	RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i)
 		rd_list_add(list, rd_kafka_toppar_keep(
 				    rd_kafka_toppar_s2i(s_rktp)));
 
@@ -983,7 +983,7 @@ void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt) {
 	partitions = rd_kafka_topic_get_all_partitions(rkt);
 	rd_kafka_topic_rdunlock(rkt);
 
-	RD_LIST_FOREACH(s_rktp, partitions, i, shptr_rd_kafka_toppar_t) {
+	RD_LIST_FOREACH(s_rktp, partitions, i) {
 		rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
 
 		rd_kafka_toppar_lock(rktp);

@@ -1229,7 +1229,7 @@ rd_kafka_cgrp_update_subscribed_topics (rd_kafka_cgrp_t *rkcg,
                      rd_list_cnt(rkcg->rkcg_subscribed_topics),
                      rd_list_cnt(tinfos));
 
-        RD_LIST_FOREACH(tinfo, tinfos, i, rd_kafka_topic_info_t)
+        RD_LIST_FOREACH(tinfo, tinfos, i)
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_METADATA,
                              "SUBSCRIPTION",
                              " Topic %s with %d partition(s)",
@@ -2571,7 +2571,7 @@ static void rd_kafka_cgrp_timeout_scan (rd_kafka_cgrp_t *rkcg, rd_ts_t now) {
                                 rd_kafka_op_offset_commit_timeout_check,
                                 &ofc_state);
 
-        RD_LIST_FOREACH(rko, &ofc_state.expired, i, rd_kafka_op_t)
+        RD_LIST_FOREACH(rko, &ofc_state.expired, i)
                 rd_kafka_cgrp_op_handle_OffsetCommit(
                         rkcg->rkcg_rk, NULL,
                         RD_KAFKA_RESP_ERR__WAIT_COORD,
