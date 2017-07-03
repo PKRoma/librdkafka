@@ -203,7 +203,7 @@ int rd_gettimeofday (struct timeval *tv, struct timezone *tz) {
 	SystemTimeToFileTime(&st, &ft);
 	d.HighPart = ft.dwHighDateTime;
 	d.LowPart  = ft.dwLowDateTime;
-	tv->tv_sec  = (long)((d.QuadPart - 116444736000000000ll) / 10000000L);
+	tv->tv_sec  = (long)((d.QuadPart - 116444736000000000ull) / 10000000L);
 	tv->tv_usec = (long)(st.wMilliseconds * 1000);
 
 	return 0;

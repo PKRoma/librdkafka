@@ -46,7 +46,7 @@ static RD_UNUSED void rd_avg_calc (rd_avg_t *ra, rd_ts_t now) {
                 rd_ts_t elapsed = now - ra->ra_v.start;
 
                 if (elapsed)
-                        ra->ra_v.avg = (ra->ra_v.sum * 1000000ll) / elapsed;
+                        ra->ra_v.avg = (ra->ra_v.sum * 1000000ull) / elapsed;
                 else
                         ra->ra_v.avg = 0;
 

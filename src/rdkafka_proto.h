@@ -118,7 +118,7 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 				return ret;
 		}
 
-		return names[ApiKey];
+        return names[ApiKey];
 }
 
 

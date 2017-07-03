@@ -45,7 +45,7 @@ void *rd_gz_decompress (const void *compressed, int compressed_len,
 	 * Second pass (2): perform actual decompression.
 	 */
 
-	if (*decompressed_lenp != 0LL)
+	if (*decompressed_lenp != 0ULL)
 		pass++;
 
 	for (; pass <= 2 ; pass++) {

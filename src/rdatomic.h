@@ -30,14 +30,14 @@
 #include "tinycthread.h"
 
 typedef struct {
-	volatile long val;
+	int32_t val;
 #ifndef HAVE_ATOMICS_32
 	mtx_t lock;
 #endif
 } rd_atomic32_t;
 
 typedef struct {
-	volatile int64_t val;
+	int64_t val;
 #ifndef HAVE_ATOMICS_64
 	mtx_t lock;
 #endif
@@ -52,7 +52,7 @@ static RD_INLINE RD_UNUSED void rd_atomic32_init (rd_atomic32_t *ra, int32_t v) 
 }
 
 
-static RD_INLINE int32_t RD_UNUSED rd_atomic32_add (rd_atomic32_t *ra, long v) {
+static RD_INLINE int32_t RD_UNUSED rd_atomic32_add (rd_atomic32_t *ra, int32_t v) {
 #ifdef __SUNPRO_C
 	return atomic_add_32_nv(&ra->val, v);
 #elif defined(_MSC_VER)

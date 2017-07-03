@@ -716,7 +716,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
          * reaches 1 and then decommissions itself. */
         TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_tmp) {
                 /* Add broker's thread to wait_thrds list for later joining */
-                thrd = (thrd_t *)malloc(sizeof(*thrd));
+                thrd = malloc(sizeof(*thrd));
                 *thrd = rkb->rkb_thread;
                 rd_list_add(&wait_thrds, thrd);
                 rd_kafka_wrunlock(rk);
@@ -758,7 +758,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                                rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
 
                 rk->rk_internal_rkb = NULL;
-                thrd = (thrd_t *)malloc(sizeof(*thrd));
+                thrd = malloc(sizeof(*thrd));
                 *thrd = rkb->rkb_thread;
                 rd_list_add(&wait_thrds, thrd);
         }
@@ -2395,7 +2395,6 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
 int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
                       int cb_type, void *opaque) {
 	rd_kafka_msg_t *rkm;
-	static int dcnt = 0;
 
 	/* Return-as-event requested, see if op can be converted to event,
 	 * otherwise fall through and trigger callbacks. */

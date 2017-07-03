@@ -114,7 +114,7 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 	char *n = strndup(s, len);
 	assert(n);
 #else
-	char *n = (char *)malloc(len + 1);
+	char *n = malloc(len + 1);
 	assert(n);
 	memcpy(n, s, len);
 	n[len] = '\0';
@@ -137,14 +137,14 @@ char *rd_string_render (const char *templ,
  */
 
 #ifdef strndupa
-#define rd_strndupa(DESTPTR,PTR,LEN)  (*(DESTPTR) = (char *)strndupa(PTR,LEN))
+#define rd_strndupa(DESTPTR,PTR,LEN)  (*(DESTPTR) = strndupa(PTR,LEN))
 #else
-#define rd_strndupa(DESTPTR,PTR,LEN) (*(DESTPTR) = (char *)rd_alloca(LEN+1), \
+#define rd_strndupa(DESTPTR,PTR,LEN) (*(DESTPTR) = rd_alloca(LEN+1), \
       memcpy(*(DESTPTR), (PTR), LEN), *((*(DESTPTR))+(LEN)) = 0)
 #endif
 
 #ifdef strdupa
-#define rd_strdupa(DESTPTR,PTR)  (*(DESTPTR) = (char *)strdupa(PTR))
+#define rd_strdupa(DESTPTR,PTR)  (*(DESTPTR) = strdupa(PTR))
 #else
 #define rd_strdupa(DESTPTR,PTR)  rd_strndupa(DESTPTR,PTR,strlen(PTR))
 #endif
