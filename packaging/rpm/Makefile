@@ -54,3 +54,18 @@ clean:
 distclean: clean
 	rm -f build.log root.log state.log available_pkgs installed_pkgs \
 		*.rpm *.tar.gz
+
+# Prepare ubuntu 14.04 for building RPMs with mock.
+#  - older versions of mock needs the config file to reside in /etc/mock,
+#    so we copy it there.
+#  - add a mock system group (if not already exists)
+#  - add the current user to the mock group.
+# NOTE: This target should be run with sudo.
+prepare_ubuntu:
+	apt-get -qq update
+#	curl -sL -o /tmp/mock.deb 'https://launchpad.net/ubuntu/+source/mock/1.3.2-1/+build/11780212/+files/mock_1.3.2-1_all.deb'
+#	apt install -y /tmp/mock.deb
+#	apt install -y git python-six
+	apt install -y mock
+	addgroup --system mock || true
+	adduser $$(whoami) mock

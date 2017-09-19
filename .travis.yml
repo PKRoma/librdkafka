@@ -11,7 +11,7 @@ os:
 dist: trusty
 sudo: false
 before_install:
-  - if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]]; then sudo apt-get -qq update && sudo apt-get install -y mock && sudo addgroup --system mock && sudo adduser $(whoami) mock ; fi
+  - if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]]; then sudo make -C packaging/rpm prepare_ubuntu ; fi
 before_script:
  - ccache -s || echo "CCache is not available."
 script:
@@ -22,7 +22,7 @@ script:
 - make -j2 all examples check && make -C tests run_local
 - make install
 - (cd dest && tar cvzf ../artifacts/librdkafka.tar.gz .)
-- if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]]; then cd packaging/rpm && make all copy-artifacts ; fi
+- if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]]; then sg mock "make -C packaging/rpm all copy-artifacts" ; fi
 deploy:
   provider: s3
   access_key_id:
