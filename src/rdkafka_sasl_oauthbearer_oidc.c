@@ -1341,42 +1341,43 @@ static int ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope(void) {
  *          JWT_MISSING_SUB:
  *            {"exp":9999999999,"iat":1000000000,"client_id":"client_id_123"}
  */
- /* payload: {"exp":9999999999,"iat":1000000000,"sub":"subject"} */
+/* payload: {"exp":9999999999,"iat":1000000000,"sub":"subject"} */
 #define UT_JWT_SUB_ONLY                                                        \
-        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                         \
+        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                           \
         "."                                                                    \
-        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwic"                  \
+        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwic"                    \
         "3ViIjoic3ViamVjdCJ9"                                                  \
         "."                                                                    \
         "fakesignature"
 /* payload: {"exp":9999999999,"iat":1000000000,"sub":"subject",
  *           "client_id":"client_id_123","azp":"azp_123"} */
 #define UT_JWT_MULTI_CLAIMS                                                    \
-        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                         \
+        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                           \
         "."                                                                    \
-        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwic3ViIjoic3ViamVj"  \
-        "dCIsImNsaWVudF9pZCI6ImNsaWVudF9pZF8xMjMiLCJhenAiOiJhenBfMTIzIn0"  \
+        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwic3ViIjoic3ViamVj"     \
+        "dCIsImNsaWVudF9pZCI6ImNsaWVudF9pZF8xMjMiLCJhenAiOiJhenBfMTIzIn0"      \
         "."                                                                    \
         "fakesignature"
 /* payload: {"exp":9999999999,"iat":1000000000,"sub":""} */
 #define UT_JWT_EMPTY_SUB                                                       \
-        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                         \
+        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                           \
         "."                                                                    \
-        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwic3ViIjoiIn0"        \
+        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwic3ViIjoiIn0"          \
         "."                                                                    \
         "fakesignature"
 /* payload: {"exp":9999999999,"iat":1000000000,"client_id":"client_id_123"} */
 #define UT_JWT_MISSING_SUB                                                     \
-        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                         \
+        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                           \
         "."                                                                    \
-        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwiY2xpZW50X2lkIjoi"  \
-        "Y2xpZW50X2lkXzEyMyJ9"                                                \
+        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwiY2xpZW50X2lkIjoi"     \
+        "Y2xpZW50X2lkXzEyMyJ9"                                                 \
         "."                                                                    \
         "fakesignature"
 
 /**
- * @brief Verifies the extraction logic of the subject from the configured JWT claim name,
- *        falls back to "sub" when unconfigured, and rejects missing or empty claim values.
+ * @brief Verifies the extraction logic of the subject from the configured JWT
+ * claim name, falls back to "sub" when unconfigured, and rejects missing or
+ * empty claim values.
  */
 static int ut_sasl_oauthbearer_oidc_sub_claim_name(void) {
 
@@ -1397,8 +1398,8 @@ static int ut_sasl_oauthbearer_oidc_sub_claim_name(void) {
              rd_true, "client_id_123"},
             {"Custom 'azp' claim", UT_JWT_MULTI_CLAIMS, "azp", rd_true,
              "azp_123"},
-            {"Custom 'client_id' claim succeeds without sub", UT_JWT_MISSING_SUB,
-             "client_id", rd_true, "client_id_123"},
+            {"Custom 'client_id' claim succeeds without sub",
+             UT_JWT_MISSING_SUB, "client_id", rd_true, "client_id_123"},
             {"Missing 'sub' claim fails", UT_JWT_MISSING_SUB, "sub", rd_false,
              NULL},
             {"Empty 'sub' value fails", UT_JWT_EMPTY_SUB, "sub", rd_false,
@@ -1426,25 +1427,23 @@ static int ut_sasl_oauthbearer_oidc_sub_claim_name(void) {
                              tests[i].test_name);
 
                 result = rd_kafka_oidc_token_try_validate(
-                    json, "access_token", tests[i].sub_claim_name, &sub,
-                    &exp_v, errstr, sizeof(errstr));
+                    json, "access_token", tests[i].sub_claim_name, &sub, &exp_v,
+                    errstr, sizeof(errstr));
 
                 if (tests[i].expect_success) {
                         RD_UT_ASSERT(result != NULL,
                                      "[%s] Expected success but got error: %s",
                                      tests[i].test_name, errstr);
-                        RD_UT_ASSERT(sub != NULL,
-                                     "[%s] Expected non-NULL sub",
+                        RD_UT_ASSERT(sub != NULL, "[%s] Expected non-NULL sub",
                                      tests[i].test_name);
-                        RD_UT_ASSERT(
-                            !strcmp(sub, tests[i].expected_sub),
-                            "[%s] Expected sub '%s', got '%s'",
-                            tests[i].test_name, tests[i].expected_sub, sub);
+                        RD_UT_ASSERT(!strcmp(sub, tests[i].expected_sub),
+                                     "[%s] Expected sub '%s', got '%s'",
+                                     tests[i].test_name, tests[i].expected_sub,
+                                     sub);
                 } else {
-                        RD_UT_ASSERT(
-                            result == NULL,
-                            "[%s] Expected failure but got sub '%s'",
-                            tests[i].test_name, sub ? sub : "(null)");
+                        RD_UT_ASSERT(result == NULL,
+                                     "[%s] Expected failure but got sub '%s'",
+                                     tests[i].test_name, sub ? sub : "(null)");
                 }
 
                 RD_IF_FREE(sub, rd_free);
