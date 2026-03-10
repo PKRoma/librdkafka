@@ -421,6 +421,12 @@ rd_kafka_resp_err_t rd_kafka_share_inflight_ack_update(
                             RD_KAFKA_SHARE_INTERNAL_ACK_GAP)
                                 return RD_KAFKA_RESP_ERR__STATE;
 
+                        /* Decrement unacked count when transitioning
+                         * from ACQUIRED to an explicit ack type. */
+                        if (entry->types[idx] ==
+                            RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED)
+                                rkshare->rkshare_unacked_cnt--;
+
                         /* Update the type */
                         entry->types[idx] = type;
 
