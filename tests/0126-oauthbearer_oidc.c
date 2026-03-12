@@ -598,7 +598,7 @@ void do_test_produce_consumer_with_OIDC_sub_claim(rd_kafka_conf_t *conf) {
                         do_test_produce_consumer_with_OIDC(test_name,
                                                            sub_claim_conf);
                 } else {
-                        /* These variations should fail due to missing claim */
+                        /* These variations should fail */
                         do_test_produce_consumer_with_OIDC_should_fail(
                             test_name, sub_claim_conf);
                 }
