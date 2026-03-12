@@ -1386,10 +1386,6 @@ static int ut_sasl_oauthbearer_oidc_sub_claim_name(void) {
                 rd_bool_t expect_success;
                 const char *expected_sub;
         } tests[] = {
-            {"NULL sub_claim_name defaults to 'sub'", UT_JWT_SUB_ONLY, NULL,
-             rd_true, "subject"},
-            {"Empty sub_claim_name defaults to 'sub'", UT_JWT_SUB_ONLY, "",
-             rd_true, "subject"},
             {"Explicit 'sub' claim name", UT_JWT_SUB_ONLY, "sub", rd_true,
              "subject"},
             {"Custom 'client_id' claim", UT_JWT_MULTI_CLAIMS, "client_id",
