@@ -730,9 +730,7 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
                 goto fail;
         }
 
-        /* Safety check to default to "sub" if not set */
-        if (!sub_claim_name || !*sub_claim_name)
-                sub_claim_name = "sub";
+        rd_dassert(sub_claim_name && *sub_claim_name);
 
         jwt_sub = cJSON_GetObjectItem(payloads, sub_claim_name);
         if (jwt_sub == NULL) {

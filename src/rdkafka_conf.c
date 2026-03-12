@@ -353,6 +353,19 @@ rd_kafka_conf_validate_partitioner(const struct rd_kafka_property *prop,
                !strcmp(val, "fnv1a_random");
 }
 
+/**
+ * @brief Validate that a string is non-null, non-empty, and not whitespace-only.
+ */
+static rd_bool_t rd_kafka_conf_validate_str(const char *value) {
+        const char *p;
+        if (!value || !*value)
+                return rd_false;
+        for (p = value; *p; p++) {
+                if (!isspace((int)*p))
+                        return rd_true;
+        }
+        return rd_false;
+}
 
 /**
  * librdkafka configuration property definitions.
@@ -4142,6 +4155,14 @@ const char *rd_kafka_conf_finalize_oauthbearer_oidc(rd_kafka_conf_t *conf) {
                 conf->enabled_events |= RD_KAFKA_EVENT_BACKGROUND;
                 conf->sasl.enable_callback_queue = 1;
         }
+
+        if (rd_kafka_conf_is_modified(conf,
+                                      "sasl.oauthbearer.sub.claim.name") &&
+            !rd_kafka_conf_validate_str(
+                conf->sasl.oauthbearer.sub_claim_name))
+                return "`sasl.oauthbearer.sub.claim.name` must be "
+                       "non-empty and not contain only whitespace";
+
         return NULL;
 }
 
