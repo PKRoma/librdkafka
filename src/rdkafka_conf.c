@@ -1139,7 +1139,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "JWT claim name to use as the subject (principal) when validating "
      "OIDC access tokens. Must be present in the JWT payload with a "
      "non-empty value. Should match the broker's "
-     "sasl.oauthbearer.sub.claim.name configuration for consistent "
+     "`sasl.oauthbearer.sub.claim.name` configuration for consistent "
      "authentication. "
      "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      .sdef = "sub", _UNSUPPORTED_OIDC},
