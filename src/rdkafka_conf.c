@@ -4909,6 +4909,20 @@ int unittest_conf(void) {
 
         rd_kafka_conf_destroy(conf);
 
+        /* Verify rd_kafka_conf_validate_str */
+        RD_UT_ASSERT(!rd_kafka_conf_validate_str(NULL),
+                     "NULL must be invalid");
+        RD_UT_ASSERT(!rd_kafka_conf_validate_str(""),
+                     "empty string must be invalid");
+        RD_UT_ASSERT(!rd_kafka_conf_validate_str("   "),
+                     "whitespace-only string must be invalid");
+        RD_UT_ASSERT(!rd_kafka_conf_validate_str("\t\n"),
+                     "tab/newline-only string must be invalid");
+        RD_UT_ASSERT(rd_kafka_conf_validate_str("sub"),
+                     "\"sub\" must be valid");
+        RD_UT_ASSERT(rd_kafka_conf_validate_str(" sub "),
+                     "\" sub \" must be valid");
+
         RD_UT_PASS();
 }
 
