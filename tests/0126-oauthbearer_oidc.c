@@ -149,41 +149,6 @@ static void do_test_produce_consumer_with_OIDC_expired_token_should_fail(
 }
 
 /**
- * @brief Verify that creating a kafka handle fails at configuration
- *        finalization time.
- */
-static void do_test_produce_consumer_with_OIDC_should_fail_conf(
-    const char *test_name,
-    const rd_kafka_conf_t *base_conf) {
-        rd_kafka_t *rk;
-        rd_kafka_conf_t *conf;
-        char errstr[512];
-
-        const char *url = test_getenv("VALID_OIDC_URL", NULL);
-
-        SUB_TEST("Test config failure with oidc configuration: %s", test_name);
-
-        if (!url) {
-                SUB_TEST_SKIP(
-                    "VALID_OIDC_URL environment variable is not set\n");
-                return;
-        }
-
-        conf = rd_kafka_conf_dup(base_conf);
-        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url", url);
-
-        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
-
-        TEST_ASSERT(rk == NULL,
-                    "Expected rd_kafka_new to fail for invalid configuration "
-                    "but it succeeded");
-
-        rd_kafka_conf_destroy(conf);
-
-        SUB_TEST_PASS();
-}
-
-/**
  * @brief After configiguring OIDC, make sure the
  *        authentication fails as expected.
  */
@@ -535,7 +500,7 @@ typedef enum oidc_configuration_sub_claim_variation_t {
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EXPLICIT_SUB,
         /** Use custom claim name "client_id". */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_CUSTOM_CLIENT_ID,
-        /** Set empty string "" — should fail as invalid configuration. */
+        /** Set empty string "" — resets to default "sub" per librdkafka string semantics. */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EMPTY_STRING,
         /** Use a claim name that doesn't exist in the token (should fail). */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_MISSING_CLAIM,
@@ -543,7 +508,7 @@ typedef enum oidc_configuration_sub_claim_variation_t {
 } oidc_configuration_sub_claim_variation_t;
 
 #define OIDC_CONFIGURATION_SUB_CLAIM_VARIATION__FIRST_FAILING                  \
-        OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EMPTY_STRING
+        OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_MISSING_CLAIM
 
 static const char *oidc_configuration_sub_claim_variation_name(
     oidc_configuration_sub_claim_variation_t variation) {
@@ -552,7 +517,7 @@ static const char *oidc_configuration_sub_claim_variation_name(
                   variation < OIDC_CONFIGURATION_SUB_CLAIM_VARIATION__CNT);
         static const char *names[] = {
             "default sub claim", "explicit sub claim", "custom client_id claim",
-            "empty string (invalid config, should fail)", "missing claim (should fail)"};
+            "empty string (defaults to sub)", "missing claim (should fail)"};
         return names[variation];
 }
 
@@ -631,9 +596,6 @@ void do_test_produce_consumer_with_OIDC_sub_claim(rd_kafka_conf_t *conf) {
                         /* These variations should succeed */
                         do_test_produce_consumer_with_OIDC(test_name,
                                                            sub_claim_conf);
-                } else if (variation == OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EMPTY_STRING) {
-                        do_test_produce_consumer_with_OIDC_should_fail_conf(
-                                test_name, sub_claim_conf);
                 } else {
                         /* These variations should fail */
                         do_test_produce_consumer_with_OIDC_should_fail(
