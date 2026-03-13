@@ -500,7 +500,8 @@ typedef enum oidc_configuration_sub_claim_variation_t {
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EXPLICIT_SUB,
         /** Use custom claim name "client_id". */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_CUSTOM_CLIENT_ID,
-        /** Set empty string "" — resets to default "sub" per librdkafka string semantics. */
+        /** Set empty string "" — resets to default "sub" per librdkafka string
+           semantics. */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EMPTY_STRING,
         /** Use a claim name that doesn't exist in the token (should fail). */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_MISSING_CLAIM,
