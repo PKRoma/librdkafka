@@ -354,7 +354,8 @@ rd_kafka_conf_validate_partitioner(const struct rd_kafka_property *prop,
 }
 
 /**
- * @brief Validate that a string is non-null, non-empty, and not whitespace-only.
+ * @brief Validate that a string is non-null, non-empty, and not
+ * whitespace-only.
  */
 static rd_bool_t rd_kafka_conf_validate_str(const char *value) {
         const char *p;
@@ -4158,8 +4159,7 @@ const char *rd_kafka_conf_finalize_oauthbearer_oidc(rd_kafka_conf_t *conf) {
 
         if (rd_kafka_conf_is_modified(conf,
                                       "sasl.oauthbearer.sub.claim.name") &&
-            !rd_kafka_conf_validate_str(
-                conf->sasl.oauthbearer.sub_claim_name))
+            !rd_kafka_conf_validate_str(conf->sasl.oauthbearer.sub_claim_name))
                 return "`sasl.oauthbearer.sub.claim.name` must be "
                        "non-empty and not contain only whitespace";
 
