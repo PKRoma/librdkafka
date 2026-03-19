@@ -72,7 +72,7 @@ function install_source {
     local qemu_conf_args=""
     if grep -qa qemu /proc/1/cmdline 2>/dev/null && \
        grep -q alpine /etc/os-release 2>/dev/null; then
-        qemu_conf_args="cross_compiling=yes"
+        qemu_conf_args="ac_cv_func_getifaddrs=yes"
     fi
 
     # Clear out LIBS to not interfer with lib detection process.
