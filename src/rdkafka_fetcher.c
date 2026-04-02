@@ -1965,8 +1965,7 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 rko_orig->rko_u.share_fetch.ack_details = NULL;
         }
 
-        if (rko_orig)
-                rd_kafka_op_reply(rko_orig, err);
+        rd_kafka_op_reply(rko_orig, err);
 }
 
 
@@ -2061,8 +2060,7 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                 rko_orig->rko_u.share_fetch.ack_details = NULL;
         }
 
-        if (rko_orig)
-                rd_kafka_op_reply(rko_orig, err);
+        rd_kafka_op_reply(rko_orig, err);
 
         /* Enqueue the response for the app thread AFTER sending the
          * reply to the main thread.  This ensures the main thread
@@ -2709,7 +2707,7 @@ void rd_kafka_ShareAcknowledgeRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_set_timeout(rkbuf, rkb->rkb_rk->rk_conf.socket_timeout_ms,
                                  now);
 
-        rd_kafka_dbg(rkb->rkb_rk, MSG, "SHAREACK",
+        rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREACK",
                      "Issuing ShareAcknowledge request with %d toppars "
                      "to broker %s (id %" PRId32 ")",
                      cnt, rkb->rkb_name, rkb->rkb_nodeid);
