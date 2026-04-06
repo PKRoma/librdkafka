@@ -37,6 +37,7 @@
 #include "rdkafka_metadata.h"
 #include "rdkafka_cgrp.h"
 #include "rdkafka_interceptor.h"
+#include "rdkafka_share_acknowledgement.h"
 #include "rdmap.h"
 
 #include "rdunittest.h"
@@ -3901,10 +3902,6 @@ static void rd_kafka_cgrp_heartbeat(rd_kafka_cgrp_t *rkcg) {
             NULL);
 }
 
-// Forward decelaration
-static rd_bool_t rd_kafka_share_are_sessions_closed(rd_kafka_t *rk);
-
-
 /**
  * Cgrp is now terminated: decommission it and signal back to application.
  */
@@ -3919,10 +3916,9 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(NULL, !rkcg->rkcg_group_assignment);
         if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk))
         {
-                rd_kafka_assert(NULL, rd_kafka_share_are_sessions_closed(rkcg->rkcg_rk));
+                rd_kafka_assert(NULL, rkcg->rkcg_share.share_session_leave_remaining_cnt == 0);
                 rd_kafka_assert(NULL, rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0);
                 // TODO: check if more asserts are required
-
         } else {
                 rd_kafka_assert(NULL, !rd_kafka_assignment_in_progress(rkcg->rkcg_rk));
                 rd_kafka_assert(NULL, rkcg->rkcg_rk->rk_consumer.wait_commit_cnt == 0);
@@ -3984,7 +3980,7 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate(rd_kafka_cgrp_t *rkcg) {
                 return 0;
 
         if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)
-        && !rd_kafka_share_are_sessions_closed(rkcg->rkcg_rk))
+        && rkcg->rkcg_share.share_session_leave_remaining_cnt)
                 return 0;
 
         /* Check if wait-coord queue has timed out.
@@ -6108,8 +6104,19 @@ rd_kafka_cgrp_subscribe(rd_kafka_cgrp_t *rkcg,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-// Enqueues a fetch leave op to the given broker's ops queue
-// TODO: see what would be the best place to keep this function
+/**
+ * @brief Create and enqueue a leave SHARE_FETCH op on a broker.
+ *
+ * Moves any cached ack details from rkb_share_async_ack_details
+ * into the op, sets rkb_share_fetch_enqueued, and enqueues the op
+ * on the broker's ops queue.
+ *
+ * @param rk Client instance
+ * @param rkb Broker to enqueue on. Must not have rkb_share_fetch_enqueued set.
+ * @param should_fetch Whether the broker should fetch records.
+ *
+ * @locality main thread
+ */
 void rd_kafka_share_enqueue_fetch_leave_op(rd_kafka_t *rk, rd_kafka_broker_t *rkb)
 {
         rd_kafka_op_t *rko_sf = NULL;
@@ -6117,7 +6124,11 @@ void rd_kafka_share_enqueue_fetch_leave_op(rd_kafka_t *rk, rd_kafka_broker_t *rk
         rko_sf->rko_u.share_fetch.should_leave = rd_true;
         rko_sf->rko_u.share_fetch.abs_timeout = rd_timeout_init(rk->rk_conf.socket_timeout_ms);
         rko_sf->rko_u.share_fetch.should_fetch = rd_false;
-        // TODO: Add ack details. Refer: rd_kafka_share_enqueue_fetch_op
+
+        rko_sf->rko_u.share_fetch.ack_details =
+            rkb->rkb_share_async_ack_details;
+        rkb->rkb_share_async_ack_details = NULL;
+
         rd_kafka_broker_keep(rkb);
         rko_sf->rko_u.share_fetch.target_broker = rkb;
         rko_sf->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
@@ -6127,40 +6138,6 @@ void rd_kafka_share_enqueue_fetch_leave_op(rd_kafka_t *rk, rd_kafka_broker_t *rk
         rkb->rkb_share_fetch_enqueued = rd_true;
         rd_kafka_q_enq(rkb->rkb_ops, rko_sf);
 }
-
-// Go through all the brokers to see if all share sessions have been closed
-// This function is expected to be called only after close() API is called
-// TODO: see what would be the best place to keep this function
-static rd_bool_t rd_kafka_share_are_sessions_closed(rd_kafka_t *rk)
-{
-        rd_kafka_broker_t *rkb = NULL;
-        rd_bool_t all_closed = rd_true;
-        rd_kafka_rdlock(rk);
-        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                if (rd_kafka_broker_or_instance_terminating(rkb) ||
-                    RD_KAFKA_BROKER_IS_LOGICAL(rkb))
-                        continue;
-
-                if (!rkb->rkb_share_session_closed) {
-                        // Only if consumer has been "closed", we will think about sending leave op
-                        if (rkb->rkb_share_fetch_enqueued) {
-                                rd_kafka_dbg(rk, CGRP, "CLOSE",
-                                             "Broker %s has in-flight request, ",
-                                             rd_kafka_broker_name(rkb));
-                        }
-                        else {
-                                rd_kafka_share_enqueue_fetch_leave_op(rk, rkb);
-                        }
-                        all_closed = rd_false;
-                        break;
-                }
-        }
-        rd_kafka_rdunlock(rk);
-        return all_closed;
-}
-
-
-
 
 /**
  * Same as cgrp_terminate() but called from the cgrp/main thread upon receiving
@@ -6209,12 +6186,23 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
          * sessions with all the brokers */
         if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
                 rd_kafka_broker_t *rkb = NULL;
+                rkcg->rkcg_share.share_session_leave_remaining_cnt = 0;
+                rd_list_t *ack_batches = rko->rko_u.share_fetch_fanout.ack_batches;
+                if (ack_batches) {
+                        rd_kafka_share_segregate_acks_by_leader(rkcg->rkcg_rk, ack_batches);
+                        /* Ownership of elements transferred to broker ack_details.
+                         * Destroy the container. */
+                        rd_list_destroy(ack_batches);
+                }
                 rd_kafka_rdlock(rkcg->rkcg_rk);
                 TAILQ_FOREACH(rkb, &rkcg->rkcg_rk->rk_brokers, rkb_link) {
                         if (rd_kafka_broker_or_instance_terminating(rkb) ||
                             RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                                 continue;
 
+                        rkcg->rkcg_share.share_session_leave_remaining_cnt++;
+                        /* For brokers that are currently processing share fetch requests
+                         * we will enqueue the leave op when they reply back to the main thread */
                         if (rkb->rkb_share_fetch_enqueued) {
                                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CLOSE",
                                              "Broker %s has in-flight request, ",
@@ -6273,6 +6261,24 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
 void rd_kafka_cgrp_terminate(rd_kafka_cgrp_t *rkcg, rd_kafka_replyq_t replyq) {
         rd_kafka_assert(NULL, !thrd_is_current(rkcg->rkcg_rk->rk_thread));
         rd_kafka_cgrp_op(rkcg, NULL, replyq, RD_KAFKA_OP_TERMINATE, 0);
+}
+
+/**
+ * Terminate and decommission a share cgrp asynchronously.
+ * Passes the acknowledgement batches in the rko to be sent
+ * in the session close requests.
+ *
+ * Locality: any thread
+ */
+void rd_kafka_share_cgrp_terminate(rd_kafka_cgrp_t *rkcg, rd_kafka_replyq_t replyq) {
+        rd_kafka_assert(NULL, !thrd_is_current(rkcg->rkcg_rk->rk_thread));
+        rd_list_t *ack_batches =
+            rd_kafka_share_build_ack_details(rkcg->rkcg_rk->rk_rkshare);
+
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_TERMINATE);
+        rko->rko_replyq = replyq;
+        rko->rko_u.share_fetch_fanout.ack_batches = ack_batches;
+        rd_kafka_q_enq(rkcg->rkcg_ops, rko);
 }
 
 
