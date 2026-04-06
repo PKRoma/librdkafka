@@ -255,9 +255,7 @@ typedef struct rd_kafka_mock_sharegroup_s {
         int record_lock_duration_ms; /**< Per-record lock duration in ms.
                                       *   0 = use session_timeout_ms
                                       *   as fallback (default 0). */
-        int isolation_level;         /**< Share isolation level.
-                                      *   0 = read_uncommitted (default),
-                                      *   1 = read_committed. */
+        int isolation_level;         /**< Share isolation level
         int max_size;                /**< Max members allowed.
                                       *   0 = unlimited (default). */
 } rd_kafka_mock_sharegroup_t;
@@ -304,7 +302,7 @@ typedef enum {
 } rd_kafka_mock_txn_state_t;
 
 /**
- * @brief A partition that is part of an active transaction.
+ * @struct A partition that is part of an active transaction.
  *
  * Linked from rd_kafka_mock_txn_t.partitions.
  */
@@ -769,8 +767,7 @@ rd_kafka_resp_err_t rd_kafka_mock_partition_leader_epoch_check(
     const rd_kafka_mock_partition_t *mpart,
     int32_t leader_epoch);
 
-/* Transaction helpers (used across rdkafka_mock.c and
- * rdkafka_mock_handlers.c) */
+/* Transaction helpers */
 rd_kafka_mock_txn_t *
 rd_kafka_mock_txn_get(rd_kafka_mock_cluster_t *mcluster,
                       const rd_kafkap_str_t *TransactionalId);
