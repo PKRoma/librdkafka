@@ -1785,14 +1785,12 @@ int main(int argc, char **argv) {
                 rd_kafka_message_t **rkmessages = NULL;
                 int share_batch_size;
 
-                share_batch_size =
-                    batch_size ? batch_size : 10001;
-                rkmessages =
-                    malloc(sizeof(*rkmessages) * share_batch_size);
+                share_batch_size = batch_size ? batch_size : 10001;
+                rkmessages = malloc(sizeof(*rkmessages) * share_batch_size);
 
                 /* Create share consumer instance. */
-                rkshare = rd_kafka_share_consumer_new(conf, errstr,
-                                                      sizeof(errstr));
+                rkshare =
+                    rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
                 if (!rkshare) {
                         fprintf(stderr,
                                 "%% Failed to create share consumer: %s\n",
@@ -1802,8 +1800,7 @@ int main(int argc, char **argv) {
 
                 err = rd_kafka_share_subscribe(rkshare, topics);
                 if (err) {
-                        fprintf(stderr,
-                                "%% Share subscribe failed: %s\n",
+                        fprintf(stderr, "%% Share subscribe failed: %s\n",
                                 rd_kafka_err2str(err));
                         exit(1);
                 }
@@ -1825,8 +1822,7 @@ int main(int argc, char **argv) {
                         cnt.t_fetch_latency += rd_clock() - fetch_latency;
 
                         if (error) {
-                                fprintf(stderr,
-                                        "%% Share consume error: %s\n",
+                                fprintf(stderr, "%% Share consume error: %s\n",
                                         rd_kafka_error_string(error));
                                 rd_kafka_error_destroy(error);
                                 continue;
