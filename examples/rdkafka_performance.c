@@ -882,10 +882,10 @@ int main(int argc, char **argv) {
         topics = rd_kafka_topic_partition_list_new(1);
 
         while ((opt = getopt(argc, argv,
-                             "PCG:Q:t:p:b:s:k:c:fi:MDd:m:S:x:"
+                             "PCG:S:t:p:b:s:k:c:fi:MDd:m:F:x:"
                              "R:a:z:o:X:B:eT:Y:qvIur:lA:OwNH:")) != -1) {
                 switch (opt) {
-                case 'Q':
+                case 'S':
                 case 'G':
                         if (rd_kafka_conf_set(conf, "group.id", optarg, errstr,
                                               sizeof(errstr)) !=
@@ -930,7 +930,7 @@ int main(int argc, char **argv) {
                 case 'm':
                         msgpattern = optarg;
                         break;
-                case 'S':
+                case 'F':
                         seq    = strtoull(optarg, NULL, 10);
                         do_seq = 1;
                         break;
@@ -1128,7 +1128,7 @@ int main(int argc, char **argv) {
                     " Options:\n"
                     "  -C | -P |    Consumer or Producer mode\n"
                     "  -G <groupid> High-level Kafka Consumer mode\n"
-                    "  -Q <groupid> Share Consumer mode\n"
+                    "  -S <groupid> Share Consumer mode\n"
                     "  -t <topic>   Topic to consume / produce\n"
                     "  -p <num>     Partition (defaults to random). "
                     "Multiple partitions are allowed in -C consumer mode.\n"
@@ -1144,7 +1144,7 @@ int main(int argc, char **argv) {
                     "  -D           Copy/Duplicate data buffer (producer)\n"
                     "  -i <ms>      Display interval\n"
                     "  -m <msg>     Message payload pattern\n"
-                    "  -S <start>   Send a sequence number starting at "
+                    "  -F <start>   Send a sequence number starting at "
                     "<start> as payload\n"
                     "  -R <seed>    Random seed value (defaults to time)\n"
                     "  -a <acks>    Required acks (producer): "
@@ -1187,7 +1187,7 @@ int main(int argc, char **argv) {
                     " In Producer mode:\n"
                     "  writes messages of size -s <..> and prints thruput\n"
                     "\n"
-                    " In Share Consumer mode (-Q):\n"
+                    " In Share Consumer mode (-S):\n"
                     "  consumes messages using share groups and prints "
                     "thruput\n"
                     "\n",
@@ -1323,7 +1323,7 @@ int main(int argc, char **argv) {
                 rd_kafka_conf_set(conf, "enable.partition.eof", "true", NULL,
                                   0);
 
-        if (mode == 'Q') {
+        if (mode == 'S') {
                 if (partition_cnt > 0) {
                         fprintf(stderr,
                                 "%% -p is not supported with "
@@ -1779,7 +1779,7 @@ int main(int argc, char **argv) {
                 rd_kafka_queue_destroy(rkqu);
                 rd_kafka_destroy(rk);
 
-        } else if (mode == 'Q') {
+        } else if (mode == 'S') {
                 /* Share Consumer */
                 rd_kafka_share_t *rkshare;
                 rd_kafka_message_t **rkmessages = NULL;
