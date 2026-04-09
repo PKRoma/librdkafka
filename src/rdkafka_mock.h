@@ -754,6 +754,65 @@ rd_kafka_mock_sharegroup_get_member_ids(rd_kafka_mock_cluster_t *mcluster,
                                         char ***member_ids_out,
                                         size_t *member_cnt_out);
 
+/**
+ * @brief Enable or disable preservation of ARCHIVED record state entries.
+ *
+ * When enabled, ARCHIVED entries below SPSO are not pruned,
+ * allowing rd_kafka_mock_sharegroup_get_record_state() to query
+ * state for already-consumed offsets.
+ *
+ * Disabled by default.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param enable   rd_true to preserve, rd_false to prune (default).
+ */
+RD_EXPORT void rd_kafka_mock_sharegroup_set_preserve_record_states(
+    rd_kafka_mock_cluster_t *mcluster,
+    rd_bool_t enable);
+
+/**
+ * @brief Get the per-record share group state for a specific offset.
+ *
+ * Retrieves the tracked state of a single record in a share group
+ * partition, identified by offset.  Any output parameter may be NULL
+ * if the caller does not need that particular value.
+ *
+ * @param mcluster       Mock cluster instance.
+ * @param group_id       The share group ID.
+ * @param topic          Topic name.
+ * @param partition      Partition index.
+ * @param offset         Record offset to look up.
+ * @param state_out      [out] Record state
+ *                       (0=AVAILABLE, 1=ACQUIRED, 2=ARCHIVED).
+ * @param delivery_count_out [out] Number of times this record has
+ *                           been acquired.
+ * @param last_ack_type_out  [out] Last ack type applied
+ *                           (-1=none, 0=GAP, 1=ACCEPT,
+ *                            2=RELEASE, 3=REJECT).
+ * @param owner_member_id_out [out] Current owner member ID,
+ *                            or NULL if none.
+ *                            Caller must free with rd_free().
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND if share group
+ *          does not exist,
+ *          RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART if
+ *          topic/partition is not tracked by the share group,
+ *          RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE if no record
+ *          state exists at the given offset.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_sharegroup_get_record_state(
+    rd_kafka_mock_cluster_t *mcluster,
+    const char *group_id,
+    const char *topic,
+    int32_t partition,
+    int64_t offset,
+    int *state_out,
+    int32_t *delivery_count_out,
+    int8_t *last_ack_type_out,
+    char **owner_member_id_out);
+
 /**@}*/
 
 #ifdef __cplusplus

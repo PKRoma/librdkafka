@@ -194,6 +194,8 @@ typedef struct rd_kafka_mock_sgrp_record_state_s {
         char *owner_member_id;
         rd_ts_t lock_expiry_ts;
         int32_t delivery_count;
+        int8_t last_ack_type;  /**< Last ack type applied: 0=GAP, 1=ACCEPT,
+                                *   2=RELEASE, 3=REJECT, -1=none yet. */
         enum rd_kafka_mock_sgrp_record_state_e state;
 } rd_kafka_mock_sgrp_record_state_t;
 
@@ -645,6 +647,11 @@ struct rd_kafka_mock_cluster_s {
                 int sharegroup_max_size;
         } defaults;
 
+        /** When true, don't prune ARCHIVED record state entries
+         *  below SPSO. Allows rd_kafka_mock_sharegroup_get_record_state()
+         *  to query state for already-consumed offsets. */
+        rd_bool_t preserve_record_states;
+
         /**< Dynamic array of IO handlers for corresponding fd in .fds */
         struct {
                 rd_kafka_mock_io_handler_t *cb; /**< Callback */
@@ -729,6 +736,13 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
 void rd_kafka_mock_sgrp_record_release(
     rd_kafka_mock_sharegroup_t *mshgrp,
     rd_kafka_mock_sgrp_record_state_t *state);
+rd_kafka_mock_sgrp_partmeta_t *
+rd_kafka_mock_sgrp_partmeta_find(rd_kafka_mock_sharegroup_t *sgrp,
+                                 rd_kafka_Uuid_t topic_id,
+                                 int32_t partition);
+rd_kafka_mock_sgrp_record_state_t *
+rd_kafka_mock_sgrp_record_state_find(rd_kafka_mock_sgrp_partmeta_t *pmeta,
+                                     int64_t offset);
 void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                                              const char *member_id);
 void rd_kafka_mock_sgrp_fetch_session_tmr_cb(rd_kafka_timers_t *rkts,
