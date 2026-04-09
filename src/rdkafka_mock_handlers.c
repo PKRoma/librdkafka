@@ -3408,9 +3408,9 @@ rd_kafka_mock_sgrp_record_state_get(rd_kafka_mock_sgrp_partmeta_t *pmeta,
         if (state)
                 return state;
 
-        state               = rd_calloc(1, sizeof(*state));
-        state->offset       = offset;
-        state->state        = RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
+        state                = rd_calloc(1, sizeof(*state));
+        state->offset        = offset;
+        state->state         = RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
         state->last_ack_type = -1;
         TAILQ_INSERT_TAIL(&pmeta->inflight, state, link);
         pmeta->inflight_cnt++;
@@ -3561,9 +3561,9 @@ static void rd_kafka_mock_sgrp_acquire_available_offsets(
         }
 }
 
-static void rd_kafka_mock_sgrp_partmeta_prune_archived(
-    rd_kafka_mock_sgrp_partmeta_t *pmeta,
-    rd_kafka_mock_cluster_t *mcluster) {
+static void
+rd_kafka_mock_sgrp_partmeta_prune_archived(rd_kafka_mock_sgrp_partmeta_t *pmeta,
+                                           rd_kafka_mock_cluster_t *mcluster) {
         rd_kafka_mock_sgrp_record_state_t *state, *tmp;
 
         if (mcluster->preserve_record_states)

@@ -802,16 +802,15 @@ RD_EXPORT void rd_kafka_mock_sharegroup_set_preserve_record_states(
  *          state exists at the given offset.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_mock_sharegroup_get_record_state(
-    rd_kafka_mock_cluster_t *mcluster,
-    const char *group_id,
-    const char *topic,
-    int32_t partition,
-    int64_t offset,
-    int *state_out,
-    int32_t *delivery_count_out,
-    int8_t *last_ack_type_out,
-    char **owner_member_id_out);
+rd_kafka_mock_sharegroup_get_record_state(rd_kafka_mock_cluster_t *mcluster,
+                                          const char *group_id,
+                                          const char *topic,
+                                          int32_t partition,
+                                          int64_t offset,
+                                          int *state_out,
+                                          int32_t *delivery_count_out,
+                                          int8_t *last_ack_type_out,
+                                          char **owner_member_id_out);
 
 /**@}*/
 

@@ -194,8 +194,8 @@ typedef struct rd_kafka_mock_sgrp_record_state_s {
         char *owner_member_id;
         rd_ts_t lock_expiry_ts;
         int32_t delivery_count;
-        int8_t last_ack_type;  /**< Last ack type applied: 0=GAP, 1=ACCEPT,
-                                *   2=RELEASE, 3=REJECT, -1=none yet. */
+        int8_t last_ack_type; /**< Last ack type applied: 0=GAP, 1=ACCEPT,
+                               *   2=RELEASE, 3=REJECT, -1=none yet. */
         enum rd_kafka_mock_sgrp_record_state_e state;
 } rd_kafka_mock_sgrp_record_state_t;
 

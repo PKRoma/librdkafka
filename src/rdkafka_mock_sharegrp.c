@@ -1137,16 +1137,16 @@ void rd_kafka_mock_sharegroup_set_preserve_record_states(
 /**
  * @brief Get the per-record share group state for a specific offset.
  */
-rd_kafka_resp_err_t rd_kafka_mock_sharegroup_get_record_state(
-    rd_kafka_mock_cluster_t *mcluster,
-    const char *group_id,
-    const char *topic,
-    int32_t partition,
-    int64_t offset,
-    int *state_out,
-    int32_t *delivery_count_out,
-    int8_t *last_ack_type_out,
-    char **owner_member_id_out) {
+rd_kafka_resp_err_t
+rd_kafka_mock_sharegroup_get_record_state(rd_kafka_mock_cluster_t *mcluster,
+                                          const char *group_id,
+                                          const char *topic,
+                                          int32_t partition,
+                                          int64_t offset,
+                                          int *state_out,
+                                          int32_t *delivery_count_out,
+                                          int8_t *last_ack_type_out,
+                                          char **owner_member_id_out) {
         rd_kafka_mock_sharegroup_t *mshgrp;
         rd_kafka_mock_topic_t *mtopic;
         rd_kafka_mock_sgrp_partmeta_t *pmeta;
@@ -1156,7 +1156,7 @@ rd_kafka_resp_err_t rd_kafka_mock_sharegroup_get_record_state(
         mtx_lock(&mcluster->lock);
 
         group_id_str = rd_kafkap_str_new(group_id, -1);
-        mshgrp = rd_kafka_mock_sharegroup_find(mcluster, group_id_str);
+        mshgrp       = rd_kafka_mock_sharegroup_find(mcluster, group_id_str);
         rd_kafkap_str_destroy(group_id_str);
 
         if (!mshgrp) {
@@ -1170,8 +1170,7 @@ rd_kafka_resp_err_t rd_kafka_mock_sharegroup_get_record_state(
                 return RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
         }
 
-        pmeta =
-            rd_kafka_mock_sgrp_partmeta_find(mshgrp, mtopic->id, partition);
+        pmeta = rd_kafka_mock_sgrp_partmeta_find(mshgrp, mtopic->id, partition);
         if (!pmeta) {
                 mtx_unlock(&mcluster->lock);
                 return RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
