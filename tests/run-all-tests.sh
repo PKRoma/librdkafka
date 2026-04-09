@@ -22,7 +22,6 @@ TEST_SSL_INTERMEDIATE_CA_ARG=""
 TEST_SASL_ARG=""
 TEST_KRAFT_ARG="--kraft"
 TEST_LOCAL_ARG=""
-TEST_CONF_ARG=""
 TEST_QUICK_ARG=""
 TEST_ASSERT_ARG=""
 TEST_PARALLEL_ARG=""
@@ -54,9 +53,9 @@ if [ ! -z $TEST_PARALLEL ]; then
     TEST_PARALLEL_ARG="-p$TEST_PARALLEL"
 fi
 if [ ! -z $TEST_CONF ]; then
-    TEST_CONF_ARG="--conf '$TEST_CONF'"
+    TEST_CONF_VALUE="$TEST_CONF"
 else
-    TEST_CONF_ARG="--conf '[\"group.share.min.record.lock.duration.ms=1000\"]'"
+    TEST_CONF_VALUE='["group.share.min.record.lock.duration.ms=1000"]'
 fi
 if [ ! -z $TEST_ENV_VARIABLES ]; then
     IFS=',' read -ra TEST_ENV_VARIABLES_ARRAY <<< "$TEST_ENV_VARIABLES"
@@ -67,15 +66,16 @@ if [ ! -z $TEST_ENV_VARIABLES ]; then
 fi
 
 TEST_ARGS="$TEST_PARALLEL_ARG $TEST_ASSERT_ARG $TEST_QUICK_ARG $TEST_LOCAL_ARG $TEST_RUNNER_PARAMETERS $TEST_MODE"
-TEST_CONFIGURATION="$TEST_SSL_ARG $TEST_SASL_ARG $TEST_KRAFT_ARG $TEST_CONF_ARG $TEST_TRIVUP_PARAMETERS"
+TEST_CONFIGURATION="$TEST_SSL_ARG $TEST_SASL_ARG $TEST_KRAFT_ARG $TEST_TRIVUP_PARAMETERS"
 
 echo "Running tests with:"
 echo "kafka branch: $TEST_KAFKA_GIT_REF"
 echo "kafka version: $TEST_KAFKA_VERSION"
 echo "CP version: $TEST_CP_VERSION"
-echo "configuration: $TEST_CONFIGURATION"
+echo "configuration: $TEST_CONFIGURATION --conf $TEST_CONF_VALUE"
 echo "arguments: $TEST_ARGS"
 (cd tests && python3 -m trivup.clusters.KafkaCluster $TEST_CONFIGURATION \
+--conf "$TEST_CONF_VALUE" \
 --version "$TEST_KAFKA_GIT_REF" \
 --cpversion "$TEST_CP_VERSION" \
 --cmd "python run-test-batches.py $TEST_ARGS")
