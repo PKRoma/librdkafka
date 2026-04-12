@@ -113,7 +113,7 @@ static const char *test_states[] = {
 
 #define _TEST_DECL(NAME) extern int main_##NAME(int, char **)
 #define _TEST(NAME, FLAGS, ...)                                                \
-        { .name = #NAME, .mainfunc = main_##NAME, .flags = FLAGS, __VA_ARGS__ }
+        {.name = #NAME, .mainfunc = main_##NAME, .flags = FLAGS, __VA_ARGS__}
 
 
 /**
@@ -575,7 +575,7 @@ struct test tests[] = {
           TEST_F_LOCAL,
           TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0173_share_consumer_commit_async, 0, TEST_BRKVER(0, 4, 0, 0)),
-        _TEST(0178_share_consumer_close, 0, TEST_BRKVER(0, 4, 0, 0)),
+    _TEST(0178_share_consumer_close, 0, TEST_BRKVER(0, 4, 0, 0)),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

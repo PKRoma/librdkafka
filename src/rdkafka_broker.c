@@ -3257,8 +3257,8 @@ rd_kafka_broker_share_session_toppar_remove(rd_kafka_broker_t *rkb,
          * need to add if it is not present?
          *  * Check if rktp is already present in toppars_to_forget?
          */
-        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)
-                && rkb->rkb_share_fetch_session.epoch > 0) {
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk) &&
+            rkb->rkb_share_fetch_session.epoch > 0) {
                 rd_kafka_broker_share_session_add_remove_toppar(
                     &rkb->rkb_share_fetch_session.toppars_to_forget,
                     &rkb->rkb_share_fetch_session.toppars_to_add, rktp);

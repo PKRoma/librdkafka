@@ -3914,14 +3914,20 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
 
         rd_kafka_assert(NULL, rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_TERM);
         rd_kafka_assert(NULL, !rkcg->rkcg_group_assignment);
-        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk))
-        {
-                rd_kafka_assert(NULL, rkcg->rkcg_share.share_session_leave_remaining_cnt == 0);
-                rd_kafka_assert(NULL, rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0);
-                rd_kafka_assert(NULL, !rkcg->rkcg_share.share_fetch_more_records);
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+                rd_kafka_assert(
+                    NULL,
+                    rkcg->rkcg_share.share_session_leave_remaining_cnt == 0);
+                rd_kafka_assert(
+                    NULL,
+                    rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0);
+                rd_kafka_assert(NULL,
+                                !rkcg->rkcg_share.share_fetch_more_records);
         } else {
-                rd_kafka_assert(NULL, !rd_kafka_assignment_in_progress(rkcg->rkcg_rk));
-                rd_kafka_assert(NULL, rkcg->rkcg_rk->rk_consumer.wait_commit_cnt == 0);
+                rd_kafka_assert(
+                    NULL, !rd_kafka_assignment_in_progress(rkcg->rkcg_rk));
+                rd_kafka_assert(
+                    NULL, rkcg->rkcg_rk->rk_consumer.wait_commit_cnt == 0);
         }
 
         rd_kafka_timer_stop(&rkcg->rkcg_rk->rk_timers,
@@ -3979,8 +3985,8 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate(rd_kafka_cgrp_t *rkcg) {
         if (likely(!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)))
                 return 0;
 
-        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)
-        && rkcg->rkcg_share.share_session_leave_remaining_cnt)
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
+            rkcg->rkcg_share.share_session_leave_remaining_cnt)
                 return 0;
 
         /* Check if wait-coord queue has timed out.
@@ -6117,12 +6123,13 @@ rd_kafka_cgrp_subscribe(rd_kafka_cgrp_t *rkcg,
  *
  * @locality main thread
  */
-void rd_kafka_share_enqueue_fetch_leave_op(rd_kafka_t *rk, rd_kafka_broker_t *rkb)
-{
+void rd_kafka_share_enqueue_fetch_leave_op(rd_kafka_t *rk,
+                                           rd_kafka_broker_t *rkb) {
         rd_kafka_op_t *rko_sf = NULL;
-        rko_sf = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);
+        rko_sf                = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);
         rko_sf->rko_u.share_fetch.should_leave = rd_true;
-        rko_sf->rko_u.share_fetch.abs_timeout = rd_timeout_init(rk->rk_conf.socket_timeout_ms);
+        rko_sf->rko_u.share_fetch.abs_timeout =
+            rd_timeout_init(rk->rk_conf.socket_timeout_ms);
         rko_sf->rko_u.share_fetch.should_fetch = rd_false;
 
         rko_sf->rko_u.share_fetch.ack_details =
@@ -6191,32 +6198,38 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
         /* For share groups, we have to additionally close
          * sessions with all the brokers */
         if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
-                rd_kafka_broker_t *rkb = NULL;
+                rd_kafka_broker_t *rkb                             = NULL;
                 rkcg->rkcg_share.share_session_leave_remaining_cnt = 0;
-                rd_list_t *ack_batches = rko->rko_u.share_fetch_fanout.ack_batches;
+                rd_list_t *ack_batches =
+                    rko->rko_u.share_fetch_fanout.ack_batches;
                 if (ack_batches) {
-                        rd_kafka_share_segregate_acks_by_leader(rkcg->rkcg_rk, ack_batches);
-                        /* Ownership of elements transferred to broker ack_details.
-                         * Destroy the container. */
+                        rd_kafka_share_segregate_acks_by_leader(rkcg->rkcg_rk,
+                                                                ack_batches);
+                        /* Ownership of elements transferred to broker
+                         * ack_details. Destroy the container. */
                         rd_list_destroy(ack_batches);
                 }
                 rd_kafka_rdlock(rkcg->rkcg_rk);
                 TAILQ_FOREACH(rkb, &rkcg->rkcg_rk->rk_brokers, rkb_link) {
-                        if (rkb->rkb_share_fetch_session.epoch <= 0 || rd_kafka_broker_or_instance_terminating(rkb) ||
+                        if (rkb->rkb_share_fetch_session.epoch <= 0 ||
+                            rd_kafka_broker_or_instance_terminating(rkb) ||
                             RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                                 continue;
 
                         rkcg->rkcg_share.share_session_leave_remaining_cnt++;
-                        /* For brokers that are currently processing share fetch requests
-                         * we will enqueue the leave op when they reply back to the main thread */
+                        /* For brokers that are currently processing share fetch
+                         * requests we will enqueue the leave op when they reply
+                         * back to the main thread */
                         if (rkb->rkb_share_fetch_enqueued) {
-                                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CLOSE",
-                                             "Broker %s has in-flight request, ",
-                                             rd_kafka_broker_name(rkb));
+                                rd_kafka_dbg(
+                                    rkcg->rkcg_rk, CGRP, "CLOSE",
+                                    "Broker %s has in-flight request, ",
+                                    rd_kafka_broker_name(rkb));
                                 continue;
                         }
 
-                        rd_kafka_share_enqueue_fetch_leave_op(rkcg->rkcg_rk, rkb);
+                        rd_kafka_share_enqueue_fetch_leave_op(rkcg->rkcg_rk,
+                                                              rkb);
                 }
                 rd_kafka_rdunlock(rkcg->rkcg_rk);
         }
@@ -6271,13 +6284,14 @@ void rd_kafka_cgrp_terminate(rd_kafka_cgrp_t *rkcg, rd_kafka_replyq_t replyq) {
  *
  * Locality: any thread
  */
-void rd_kafka_share_cgrp_terminate(rd_kafka_cgrp_t *rkcg, rd_kafka_replyq_t replyq) {
+void rd_kafka_share_cgrp_terminate(rd_kafka_cgrp_t *rkcg,
+                                   rd_kafka_replyq_t replyq) {
         rd_kafka_assert(NULL, !thrd_is_current(rkcg->rkcg_rk->rk_thread));
         rd_list_t *ack_batches =
             rd_kafka_share_build_ack_details(rkcg->rkcg_rk->rk_rkshare);
 
         rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_TERMINATE);
-        rko->rko_replyq = replyq;
+        rko->rko_replyq    = replyq;
         rko->rko_u.share_fetch_fanout.ack_batches = ack_batches;
         rd_kafka_q_enq(rkcg->rkcg_ops, rko);
 }

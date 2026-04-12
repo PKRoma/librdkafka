@@ -327,7 +327,7 @@ rd_kafka_share_find_ack_batch(rd_list_t *ack_list,
  * @locality main thread
  */
 void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
-                                                    rd_list_t *ack_batches) {
+                                             rd_list_t *ack_batches) {
         rd_kafka_share_ack_batches_t *batch;
         int batch_cnt = rd_list_cnt(ack_batches);
 

@@ -86,8 +86,9 @@
 //
 //         test_conf_init(&conf, NULL, 60);
 //
-//         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
-//         rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
+//         rd_kafka_conf_set(conf, "group.id", group_id, errstr,
+//         sizeof(errstr)); rd_kafka_conf_set(conf, "enable.auto.commit",
+//         "false", errstr,
 //                           sizeof(errstr));
 //         rd_kafka_conf_set(conf, "share.acknowledgement.mode", "explicit",
 //                           errstr, sizeof(errstr));
@@ -95,7 +96,8 @@
 //                           errstr, sizeof(errstr));
 //
 //         rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-//         TEST_ASSERT(rk, "Failed to create explicit ack consumer: %s", errstr);
+//         TEST_ASSERT(rk, "Failed to create explicit ack consumer: %s",
+//         errstr);
 //
 //         return rk;
 // }
@@ -110,13 +112,15 @@
 //
 //         test_conf_init(&conf, NULL, 60);
 //
-//         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
-//         rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
+//         rd_kafka_conf_set(conf, "group.id", group_id, errstr,
+//         sizeof(errstr)); rd_kafka_conf_set(conf, "enable.auto.commit",
+//         "false", errstr,
 //                           sizeof(errstr));
 //         /* Don't set share.acknowledgement.mode - defaults to implicit */
 //
 //         rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-//         TEST_ASSERT(rk, "Failed to create implicit ack consumer: %s", errstr);
+//         TEST_ASSERT(rk, "Failed to create implicit ack consumer: %s",
+//         errstr);
 //
 //         return rk;
 // }
@@ -128,8 +132,8 @@
 //                                       const char *group_name) {
 //         const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
 //         test_IncrementalAlterConfigs_simple(test_share_consumer_get_rk(rkshare),
-//                                             RD_KAFKA_RESOURCE_GROUP, group_name,
-//                                             cfg, 1);
+//                                             RD_KAFKA_RESOURCE_GROUP,
+//                                             group_name, cfg, 1);
 // }
 //
 // /**
@@ -175,7 +179,8 @@
 //                         total_msgs += msgs_per_partition;
 //                 }
 //
-//                 TEST_SAY("Topic %s: produced %d messages (%d partitions * %d "
+//                 TEST_SAY("Topic %s: produced %d messages (%d partitions * %d
+//                 "
 //                          "msgs)\n",
 //                          ctx->topic_names[t],
 //                          partitions[t] * msgs_per_partition, partitions[t],
@@ -274,7 +279,8 @@
 //                         rd_kafka_message_t *rkm = batch[i];
 //
 //                         if (rkm->err) {
-//                                 TEST_SAY("%s: Skipping message %d with error: "
+//                                 TEST_SAY("%s: Skipping message %d with error:
+//                                 "
 //                                          "%s\n",
 //                                          consumer_name, i,
 //                                          rd_kafka_message_errstr(rkm));
@@ -286,15 +292,16 @@
 //                         if (tracked_msgs && acked < BATCH_SIZE) {
 //                                 tracked_msgs[acked].topic = rd_strdup(
 //                                     rd_kafka_topic_name(rkm->rkt));
-//                                 tracked_msgs[acked].partition = rkm->partition;
-//                                 tracked_msgs[acked].offset    = rkm->offset;
+//                                 tracked_msgs[acked].partition =
+//                                 rkm->partition; tracked_msgs[acked].offset =
+//                                 rkm->offset;
 //                         }
 //
 //                         TEST_SAY("%s: Acking message %d: %s [%d] @ offset "
 //                                  "%llu\n",
 //                                  consumer_name, acked,
-//                                  rd_kafka_topic_name(rkm->rkt), rkm->partition,
-//                                  rkm->offset);
+//                                  rd_kafka_topic_name(rkm->rkt),
+//                                  rkm->partition, rkm->offset);
 //
 //                         rd_kafka_share_acknowledge(rkshare, rkm);
 //                         rd_kafka_message_destroy(rkm);
@@ -357,7 +364,8 @@
 //         //         TEST_SAY("%s: Calling commitSync\n", consumer_name);
 //         //         error = rd_kafka_share_commit_sync(rkshare);
 //         //         if (error) {
-//         //                 TEST_FAIL("%s: commitSync failed: %s", consumer_name,
+//         //                 TEST_FAIL("%s: commitSync failed: %s",
+//         consumer_name,
 //         //                           rd_kafka_error_string(error));
 //         //                 rd_kafka_error_destroy(error);
 //         //         }
@@ -376,7 +384,8 @@
 //  * @param rkshare Consumer handle to check
 //  * @param consumer_name Name for logging
 //  * @param max_attempts Maximum consume attempts
-//  * @param expected_msgs Expected number of messages to receive (total - tracked)
+//  * @param expected_msgs Expected number of messages to receive (total -
+//  tracked)
 //  * @param tracked_msgs Array of tracked messages to check against
 //  * @param tracked_cnt Number of tracked messages
 //  * @param commit_mode Commit mode used (for error messages)
@@ -399,7 +408,8 @@
 //                  consumer_name, expected_msgs, max_attempts);
 //
 //         /* Consume messages until we get expected count or max attempts */
-//         for (attempt = 0; attempt < max_attempts && total_rcvd < expected_msgs;
+//         for (attempt = 0; attempt < max_attempts && total_rcvd <
+//         expected_msgs;
 //              attempt++) {
 //                 size_t rcvd_msgs = 0;
 //
@@ -419,12 +429,14 @@
 //                         TEST_SAY("%s: Attempt %d/%d: Received %d messages "
 //                                  "(total: %d)\n",
 //                                  consumer_name, attempt + 1, max_attempts,
-//                                  (int)rcvd_msgs, (int)(total_rcvd + rcvd_msgs));
+//                                  (int)rcvd_msgs, (int)(total_rcvd +
+//                                  rcvd_msgs));
 //                         total_rcvd += rcvd_msgs;
 //                 }
 //         }
 //
-//         TEST_SAY("%s: Received %d messages\n", consumer_name, (int)total_rcvd);
+//         TEST_SAY("%s: Received %d messages\n", consumer_name,
+//         (int)total_rcvd);
 //
 //         /* Verify we received the expected number of messages */
 //         if ((int)total_rcvd != expected_msgs) {
@@ -492,7 +504,8 @@
 //  * @brief Close with acknowledge test scenarios
 //  *
 //  * Tests consumer close behavior with different commit modes and topologies.
-//  * Verifies that acknowledged messages are not redelivered to a second consumer.
+//  * Verifies that acknowledged messages are not redelivered to a second
+//  consumer.
 //  */
 // static void test_close_with_acknowledge(void) {
 //         /**
@@ -511,7 +524,8 @@
 //         close_ack_test_config_t tests[] = {
 //             /* 1 topic, 1 partition */
 //             // {"close-1t1p-no-commit", 1, {1}, 20, COMMIT_MODE_NONE, 10},
-//             // {"close-1t1p-commit-async", 1, {1}, 20, COMMIT_MODE_ASYNC, 10},
+//             // {"close-1t1p-commit-async", 1, {1}, 20, COMMIT_MODE_ASYNC,
+//             10},
 //             //{"close-1t1p-commit-sync", 1, {1}, 20, COMMIT_MODE_SYNC, 10},
 //
 //             /* 1 topic, multiple partitions */
@@ -520,15 +534,20 @@
 //              //{"close-1t3p-commit-sync", 1, {3}, 10, COMMIT_MODE_SYNC, 15},
 //
 //             /* Multiple topics, 1 partition each */
-//             // {"close-3t1p-no-commit", 3, {1, 1, 1}, 10, COMMIT_MODE_NONE, 15},
-//             //  {"close-3t1p-commit-async", 3, {1, 1, 1}, 10, COMMIT_MODE_ASYNC,
+//             // {"close-3t1p-no-commit", 3, {1, 1, 1}, 10, COMMIT_MODE_NONE,
+//             15},
+//             //  {"close-3t1p-commit-async", 3, {1, 1, 1}, 10,
+//             COMMIT_MODE_ASYNC,
 //             // 15},
-//             // {"close-3t1p-commit-sync", 3, {1, 1, 1}, 10, COMMIT_MODE_SYNC, 15},
+//             // {"close-3t1p-commit-sync", 3, {1, 1, 1}, 10, COMMIT_MODE_SYNC,
+//             15},
 //
 //             /* Multiple topics, multiple partitions */
 //             // {"close-2t2p-no-commit", 2, {2, 2}, 10, COMMIT_MODE_NONE, 20},
-//             // {"close-2t2p-commit-async", 2, {2, 2}, 10, COMMIT_MODE_ASYNC, 20},
-//             //{"close-2t2p-commit-sync", 2, {2, 2}, 10, COMMIT_MODE_SYNC, 20},
+//             // {"close-2t2p-commit-async", 2, {2, 2}, 10, COMMIT_MODE_ASYNC,
+//             20},
+//             //{"close-2t2p-commit-sync", 2, {2, 2}, 10, COMMIT_MODE_SYNC,
+//             20},
 //         };
 //
 //         for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
@@ -558,7 +577,8 @@
 //                                          config->msgs_per_partition);
 //
 //                 /* Create consumers:
-//                  * C1 with explicit ack mode (will call acknowledge() explicitly)
+//                  * C1 with explicit ack mode (will call acknowledge()
+//                  explicitly)
 //                  * C2 with implicit ack mode (default behavior) */
 //                 c1 = create_explicit_ack_consumer("171");
 //                 c2 = create_implicit_ack_consumer("171");
@@ -609,9 +629,9 @@ int main_0178_share_consumer_close(int argc, char **argv) {
         test_timeout_set(600); /* 10 minutes */
         TEST_SKIP("Implementation is in progress");
 
-        //test_close_with_acknowledge();
+        // test_close_with_acknowledge();
 
-        //test_close_without_acknowledge();
+        // test_close_without_acknowledge();
 
         return 0;
 }
