@@ -3918,7 +3918,7 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
         {
                 rd_kafka_assert(NULL, rkcg->rkcg_share.share_session_leave_remaining_cnt == 0);
                 rd_kafka_assert(NULL, rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0);
-                // TODO: check if more asserts are required
+                rd_kafka_assert(NULL, !rkcg->rkcg_share.share_fetch_more_records);
         } else {
                 rd_kafka_assert(NULL, !rd_kafka_assignment_in_progress(rkcg->rkcg_rk));
                 rd_kafka_assert(NULL, rkcg->rkcg_rk->rk_consumer.wait_commit_cnt == 0);
@@ -6182,6 +6182,12 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
          * is performed when all toppars have left. */
         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_TERMINATE;
 
+        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
+                rkcg->rkcg_consumer_flags &=
+                    ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN &
+                    ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE;
+        }
+
         /* For share groups, we have to additionally close
          * sessions with all the brokers */
         if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
@@ -6196,7 +6202,7 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                 }
                 rd_kafka_rdlock(rkcg->rkcg_rk);
                 TAILQ_FOREACH(rkb, &rkcg->rkcg_rk->rk_brokers, rkb_link) {
-                        if (rd_kafka_broker_or_instance_terminating(rkb) ||
+                        if (rkb->rkb_share_fetch_session.epoch <= 0 || rd_kafka_broker_or_instance_terminating(rkb) ||
                             RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                                 continue;
 
@@ -6215,11 +6221,6 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                 rd_kafka_rdunlock(rkcg->rkcg_rk);
         }
 
-        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
-                rkcg->rkcg_consumer_flags &=
-                    ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN &
-                    ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE;
-        }
         rkcg->rkcg_ts_terminate = rd_clock();
         rkcg->rkcg_reply_rko    = rko;
 

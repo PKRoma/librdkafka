@@ -402,7 +402,6 @@ typedef struct rd_kafka_cgrp_s {
                                                            * reply.
                                                            *   @locality main
                                                            * thread */
-                /* TODO: KIP-932 close(): Set it to -1 during init */
                 int share_session_leave_remaining_cnt;     /**< Number of
                                                            * session leave requests
                                                            * which are either pending

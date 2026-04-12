@@ -2022,6 +2022,11 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 }
         }
 
+        /* TODO KIP-932: Session should be cleared during destroy()
+         * instead of close() */
+        if (rko_orig->rko_u.share_fetch.should_leave)
+                rd_kafka_broker_share_fetch_session_clear(rkb);
+
         /* Destroy ack_details — on success the acks have been sent,
          * on error they are unprocessable. */
         if (rko_orig->rko_u.share_fetch.ack_details) {
@@ -2114,11 +2119,6 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                 /* There is no retry for ShareFetch RPC at the broker
                  * thread level. */
         }
-
-        /* TODO KIP-932 close: See if we can move things around
-         * so that we don't do session updates happening above in case of close */
-        if (rko_orig->rko_u.share_fetch.should_leave)
-                rd_kafka_broker_share_fetch_session_clear(rkb);
 
         /* Destroy ack_details before replying — on success the acks
          * have been sent to the broker, on error they are unprocessable.
@@ -2793,17 +2793,10 @@ void rd_kafka_broker_share_fetch_leave(rd_kafka_broker_t *rkb,
         /* Set epoch to -1 to signal session close before sending request.
          * This ensures session_update_epoch() skips incrementing on reply. */
         rkb->rkb_share_fetch_session.epoch = -1;
-        rd_kafka_ShareFetchRequest(
-            rkb, rkcg->rkcg_group_id,           /* group_id */
-            rkcg->rkcg_member_id,               /* member_id */
-            rkb->rkb_share_fetch_session.epoch, /* share_session_epoch */
-            rkb->rkb_rk->rk_conf.fetch_wait_max_ms,
-            rkb->rkb_rk->rk_conf.fetch_min_bytes,
-            rkb->rkb_rk->rk_conf.fetch_max_bytes, 0, 0,
-            NULL,     /* toppars to add */
-            NULL,     /* forgetting toppars */
-            rko_orig, /* rko */
-            now);
+        rd_kafka_ShareAcknowledgeRequest(
+            rkb, rkcg->rkcg_group_id, rkcg->rkcg_member_id,
+            -1, /* epoch=-1 signals session close */
+            rko_orig, now);
 }
 
 void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
