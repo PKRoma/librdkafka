@@ -405,7 +405,7 @@ typedef struct rd_kafka_cgrp_s {
                 int share_session_leave_remaining_cnt;    /**< Number of
                                                            * session leave requests
                                                            * which are either
-                                                           * pending    to be sent or
+                                                           * pending to be sent or
                                                            * are in-flight.
                                                            * Populated when cgrp
                                                            * termination op    is

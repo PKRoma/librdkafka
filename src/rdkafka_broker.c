@@ -6523,8 +6523,6 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
 
         if (RD_KAFKA_IS_SHARE_CONSUMER(rk) &&
             rkb->rkb_source == RD_KAFKA_LEARNED) {
-                rd_kafka_op_t *rko_sf;
-
                 /* Clear pending ack details cached on this broker.
                  * TODO KIP-932: Maybe move ack_details cleanup to clear
                  *               through DESTROY err flow when main thread
