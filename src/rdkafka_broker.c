@@ -3581,10 +3581,22 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 // }
 
                 if (rko->rko_u.share_fetch.should_leave) {
-                        rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
-                                     "Processing SHARE_FETCH op: "
-                                     "should_leave is true");
-                        rd_kafka_broker_share_fetch_leave(rkb, rko, rd_clock());
+                        if (rkb->rkb_share_fetch_session.epoch > 0) {
+                                rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
+                                             "Processing SHARE_FETCH op: "
+                                             "should_leave is true");
+                                rd_kafka_broker_share_fetch_leave(rkb, rko,
+                                                                  rd_clock());
+                        } else {
+                                rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
+                                             "Ignoring SHARE_FETCH op with "
+                                             "should_leave = 1: "
+                                             "no active session");
+                                rd_kafka_op_reply(
+                                    rko,
+                                    RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND);
+                        }
+
                         rko = NULL; /* the rko is reused for the reply */
                         break;
                 }

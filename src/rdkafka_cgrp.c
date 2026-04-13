@@ -6214,8 +6214,6 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                 }
                 rd_kafka_rdlock(rkcg->rkcg_rk);
                 TAILQ_FOREACH(rkb, &rkcg->rkcg_rk->rk_brokers, rkb_link) {
-                        /* TODO KIP-932 close: Is it possible to filter brokers
-                         * who have or will have an active share session? */
                         if (rd_kafka_broker_or_instance_terminating(rkb) ||
                             RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                                 continue;
