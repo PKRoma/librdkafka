@@ -2362,6 +2362,7 @@ static int rd_kafka_thread_main(void *arg) {
                  * rkcg->rkcg_rk->rk_consumer.assignment.all should
                  * be used instead. */
                 if (RD_KAFKA_IS_SHARE_CONSUMER(rk) && rk->rk_cgrp &&
+                    !(rk->rk_cgrp->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) &&
                     rk->rk_cgrp->rkcg_share.share_fetch_more_records &&
                     rk->rk_cgrp->rkcg_share
                             .share_should_fetch_ops_in_flight_cnt == 0 &&
@@ -3497,7 +3498,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
         if (rkcg && rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {
                 rd_kafka_dbg(
                     rk, CGRP, "SHARE",
-                    "Ignoring SHARE_FETCH_FANOUT op received after close()");
+                    "Ignoring SHARE_FETCH_FANOUT op received after close");
                 return RD_KAFKA_OP_RES_HANDLED;
         }
 
@@ -4421,6 +4422,8 @@ rd_kafka_error_t *rd_kafka_consumer_close_queue(rd_kafka_t *rk,
  */
 rd_kafka_error_t *rd_kafka_share_consumer_close_queue(rd_kafka_share_t *rkshare,
                                                       rd_kafka_queue_t *rkqu) {
+        /* TODO KIP-932: Guard this with checks for rkshare
+         * and rkshare->rkshare_rk */
         if (unlikely(rd_kafka_share_consumer_closed(rkshare)))
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
                                           "Consumer already closed");
@@ -4494,16 +4497,17 @@ rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
 }
 
 rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
+        rd_kafka_error_t *error, *default_error;
+        rd_kafka_t *rk;
+        rd_kafka_q_t *rkq;
 
+        /* TODO KIP-932: Guard this with checks for rkshare and
+         * rkshare->rkshare_rk */
         if (unlikely(rd_kafka_share_consumer_closed(rkshare)))
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
                                           "Consumer already closed");
 
         rkshare->rkshare_consumer_closing = rd_true;
-
-        rd_kafka_error_t *error, *default_error;
-        rd_kafka_t *rk;
-        rd_kafka_q_t *rkq;
 
         /*
          * TODO KIP-932: Need to check if this behaviour is correct

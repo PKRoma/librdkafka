@@ -556,6 +556,11 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
                     rk->rk_conf.auto_commit_interval_ms * 1000ll,
                     rd_kafka_cgrp_offset_commit_tmr_cb, rkcg);
 
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk))
+                /* Only applicable when consumer is closing */
+                rkcg->rkcg_share.share_session_leave_remaining_cnt = -1;
+
+
         return rkcg;
 }
 
@@ -3921,8 +3926,6 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
                 rd_kafka_assert(
                     NULL,
                     rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0);
-                rd_kafka_assert(NULL,
-                                !rkcg->rkcg_share.share_fetch_more_records);
         } else {
                 rd_kafka_assert(
                     NULL, !rd_kafka_assignment_in_progress(rkcg->rkcg_rk));
@@ -6211,8 +6214,9 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                 }
                 rd_kafka_rdlock(rkcg->rkcg_rk);
                 TAILQ_FOREACH(rkb, &rkcg->rkcg_rk->rk_brokers, rkb_link) {
-                        if (rkb->rkb_share_fetch_session.epoch <= 0 ||
-                            rd_kafka_broker_or_instance_terminating(rkb) ||
+                        /* TODO KIP-932 close: Is it possible to filter brokers
+                         * who have or will have an active share session? */
+                        if (rd_kafka_broker_or_instance_terminating(rkb) ||
                             RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                                 continue;
 
