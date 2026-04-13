@@ -3592,6 +3592,25 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                                              "Ignoring SHARE_FETCH op with "
                                              "should_leave = 1: "
                                              "no active session");
+
+                                /* TODO KIP-932: Session vars should be cleared
+                                 * during destroy() instead of close() */
+                                if (rkb->rkb_share_fetch_session
+                                        .toppars_to_add) {
+                                        rd_rkb_dbg(
+                                            rkb, BROKER, "SHAREFETCH",
+                                            "Clearing %d toppars to add from "
+                                            "ShareFetch session on "
+                                            "clear",
+                                            rd_list_cnt(
+                                                rkb->rkb_share_fetch_session
+                                                    .toppars_to_add));
+                                        rd_list_destroy(
+                                            rkb->rkb_share_fetch_session
+                                                .toppars_to_add);
+                                        rkb->rkb_share_fetch_session
+                                            .toppars_to_add = NULL;
+                                }
                                 rd_kafka_op_reply(
                                     rko,
                                     RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND);
