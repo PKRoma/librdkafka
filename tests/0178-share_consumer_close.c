@@ -78,58 +78,6 @@ static const char *commit_mode_str(commit_mode_t mode) {
 }
 
 /**
- * @brief Create share consumer with explicit acknowledgement mode
- */
-static rd_kafka_share_t *create_explicit_ack_consumer(const char *group_id) {
-        rd_kafka_share_t *rk;
-        rd_kafka_conf_t *conf;
-        char errstr[512];
-
-        test_conf_init(&conf, NULL, 60);
-
-        rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "share.acknowledgement.mode", "explicit",
-                          errstr, sizeof(errstr));
-        // rd_kafka_conf_set(conf, "debug", "all", errstr, sizeof(errstr));
-
-        rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-        TEST_ASSERT(rk, "Failed to create explicit ack consumer: %s", errstr);
-
-        return rk;
-}
-
-/**
- * @brief Create share consumer with implicit acknowledgement mode (default)
- */
-static rd_kafka_share_t *create_implicit_ack_consumer(const char *group_id) {
-        rd_kafka_share_t *rk;
-        rd_kafka_conf_t *conf;
-        char errstr[512];
-
-        test_conf_init(&conf, NULL, 60);
-
-        rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
-        // rd_kafka_conf_set(conf, "debug", "all", errstr, sizeof(errstr));
-        /* Don't set share.acknowledgement.mode - defaults to implicit */
-
-        rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-        TEST_ASSERT(rk, "Failed to create implicit ack consumer: %s", errstr);
-
-        return rk;
-}
-
-/**
- * @brief Set group offset to earliest
- */
-static void set_group_offset_earliest(rd_kafka_share_t *rkshare,
-                                      const char *group_name) {
-        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
-        test_IncrementalAlterConfigs_simple(test_share_consumer_get_rk(rkshare),
-                                            RD_KAFKA_RESOURCE_GROUP, group_name,
-                                            cfg, 1);
-}
-
-/**
  * @brief Setup topics and produce messages (modular helper)
  *
  * @param ctx Test context to populate
@@ -576,10 +524,11 @@ static void test_close_with_acknowledge(void) {
 
                 /* Create C1 with explicit ack mode (will call acknowledge()
                  * explicitly). C2 will be created after C1 closes. */
-                c1 = create_explicit_ack_consumer(ctx.group_id);
+                c1 = test_create_share_consumer(ctx.group_id, rd_true);
 
                 /* Set group offset to earliest */
-                set_group_offset_earliest(c1, ctx.group_id);
+                test_set_share_group_offset_earliest(
+                    test_share_consumer_get_rk(c1), ctx.group_id);
 
                 /* Subscribe C1 only - C2 will subscribe after C1 closes */
                 subscribe_consumer(c1, ctx.topic_names, ctx.topic_cnt);
@@ -600,7 +549,7 @@ static void test_close_with_acknowledge(void) {
                 /* Create C2 with implicit ack mode after C1 is fully destroyed
                  */
                 TEST_SAY("C2: Creating and subscribing after C1 close\n");
-                c2 = create_implicit_ack_consumer(ctx.group_id);
+                c2 = test_create_share_consumer(ctx.group_id, rd_false);
                 subscribe_consumer(c2, ctx.topic_names, ctx.topic_cnt);
 
                 /* C2: Consume and verify no redelivery */
@@ -692,10 +641,11 @@ static void test_close_without_acknowledge(void) {
 
                 /* Create C1 with implicit ack mode */
                 TEST_SAY("C1: Creating consumer\n");
-                c1 = create_implicit_ack_consumer(ctx.group_id);
+                c1 = test_create_share_consumer(ctx.group_id, rd_false);
 
                 /* Set group offset to earliest */
-                set_group_offset_earliest(c1, ctx.group_id);
+                test_set_share_group_offset_earliest(
+                    test_share_consumer_get_rk(c1), ctx.group_id);
 
                 /* Subscribe C1 */
                 subscribe_consumer(c1, ctx.topic_names, ctx.topic_cnt);
@@ -779,7 +729,7 @@ static void test_close_without_acknowledge(void) {
 
                 /* Create C2 after C1 is destroyed */
                 TEST_SAY("C2: Creating consumer after C1 close\n");
-                c2 = create_implicit_ack_consumer(ctx.group_id);
+                c2 = test_create_share_consumer(ctx.group_id, rd_false);
                 subscribe_consumer(c2, ctx.topic_names, ctx.topic_cnt);
 
                 /* C2: Should be able to consume all records that C1 released
@@ -1310,7 +1260,7 @@ static void test_close_respects_socket_timeout(void) {
  *
  * Verifies that close() handles error responses from the broker gracefully.
  * When the broker responds with an error to the ShareAcknowledge request
- * (session close request), close() should handle it without retrying.
+ * (session close request), close() should handle it.
  *
  * This test injects a COORDINATOR_NOT_AVAILABLE error response and verifies
  * that close() completes (errors during close are not retriable).
@@ -1321,11 +1271,10 @@ static void test_close_with_broker_error_response(void) {
         rd_kafka_t *producer;
         rd_kafka_share_t *consumer;
         rd_kafka_conf_t *conf;
-        const char *topic = "mock-close-error";
-        const char *group = "sg-close-error";
-        const int msgcnt  = 10;
-        rd_kafka_resp_err_t error_code =
-            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE;
+        const char *topic              = "mock-close-error";
+        const char *group              = "sg-close-error";
+        const int msgcnt               = 10;
+        rd_kafka_resp_err_t error_code = RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
         rd_kafka_message_t *batch[BATCH_SIZE];
         rd_kafka_error_t *error;
         size_t rcvd;
@@ -1420,15 +1369,12 @@ static void test_close_with_broker_error_response(void) {
                     consumed);
 
         /* Inject error response for ShareAcknowledge (session close request).
-         * Since errors during close() are not retriable, we inject a single
-         * error response. close() should handle it gracefully and complete. */
+         */
         TEST_SAY("Injecting %s error for ShareAcknowledge\n",
                  rd_kafka_err2str(error_code));
         rd_kafka_mock_broker_push_request_error_rtts(
             mcluster, 1, RD_KAFKAP_ShareAcknowledge, 1, error_code, 0);
 
-        /* Call close - should complete despite the error
-         * (errors during close are not retriable) */
         TEST_SAY("Calling close() - should complete despite error...\n");
         rd_kafka_share_consumer_close(consumer);
         TEST_SAY("Close completed\n");
