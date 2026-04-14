@@ -283,7 +283,7 @@ static int consume_and_acknowledge(rd_kafka_share_t *rkshare,
 
                         TEST_SAY(
                             "%s: Acking message %d: %s [%d] @ offset "
-                            "%llu\n",
+                            "%" PRId64 "\n",
                             consumer_name, acked, rd_kafka_topic_name(rkm->rkt),
                             rkm->partition, rkm->offset);
 
@@ -409,7 +409,8 @@ static void verify_no_redelivery(rd_kafka_share_t *rkshare,
             consumer_name, expected_msgs, max_attempts);
 
         /* Consume messages until we get expected count or max attempts */
-        for (attempt = 0; attempt < max_attempts && total_rcvd < expected_msgs;
+        for (attempt = 0;
+             attempt < max_attempts && (int)total_rcvd < expected_msgs;
              attempt++) {
                 size_t rcvd_msgs = 0;
 
@@ -739,7 +740,7 @@ static void test_close_without_acknowledge(void) {
                                                 TEST_SAY(
                                                     "C1: Consumed (no ack): %s "
                                                     "[%d] @ "
-                                                    "offset %llu\n",
+                                                    "offset %" PRId64 "\n",
                                                     rd_kafka_topic_name(
                                                         batch[i]->rkt),
                                                     batch[i]->partition,
@@ -849,7 +850,7 @@ static void test_close_without_acknowledge(void) {
                                                 TEST_SAY(
                                                     "C2: Matched C1 message "
                                                     "%d/%d: "
-                                                    "%s [%d] @ offset %lld\n",
+                                                    "%s [%d] @ offset %" PRId64 "\n",
                                                     c2_matched_cnt,
                                                     c1_tracked_cnt, topic,
                                                     partition, offset);
@@ -863,7 +864,7 @@ static void test_close_without_acknowledge(void) {
                                         TEST_SAY(
                                             "C2: Received additional message "
                                             "(not from C1): %s [%d] @ offset "
-                                            "%lld\n",
+                                            "%" PRId64 "\n",
                                             topic, partition, offset);
                                 }
 
@@ -896,7 +897,7 @@ static void test_close_without_acknowledge(void) {
                 for (int j = 0; j < c1_tracked_cnt; j++) {
                         if (!c1_msg_matched[j]) {
                                 TEST_FAIL("C2: Did not receive C1 message: "
-                                          "%s [%d] @ offset %lld",
+                                          "%s [%d] @ offset %" PRId64,
                                           c1_tracked_msgs[j].topic,
                                           c1_tracked_msgs[j].partition,
                                           c1_tracked_msgs[j].offset);
@@ -1076,7 +1077,7 @@ static void test_close_with_slow_broker_response(void) {
                 /* Inject RTT delay on specified brokers
                  * This will delay responses from partition leaders including
                  * the session close request sent during close() */
-                for (i = 0; i < config->delayed_broker_cnt; i++) {
+                for (i = 0; i < (size_t)config->delayed_broker_cnt; i++) {
                         TEST_SAY("Injecting %dms RTT delay on broker %d\n",
                                  rtt_delay_ms, config->delayed_brokers[i]);
                         rd_kafka_mock_broker_set_rtt(
