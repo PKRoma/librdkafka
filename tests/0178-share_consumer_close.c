@@ -26,6 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "rdkafka_protocol.h"
 #include "test.h"
 
 #define MAX_TOPICS     16
@@ -89,7 +90,7 @@ static rd_kafka_share_t *create_explicit_ack_consumer(const char *group_id) {
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "share.acknowledgement.mode", "explicit",
                           errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "debug", "all", errstr, sizeof(errstr));
+        //rd_kafka_conf_set(conf, "debug", "all", errstr, sizeof(errstr));
 
         rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rk, "Failed to create explicit ack consumer: %s", errstr);
@@ -108,7 +109,7 @@ static rd_kafka_share_t *create_implicit_ack_consumer(const char *group_id) {
         test_conf_init(&conf, NULL, 60);
 
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "debug", "all", errstr, sizeof(errstr));
+        //rd_kafka_conf_set(conf, "debug", "all", errstr, sizeof(errstr));
         /* Don't set share.acknowledgement.mode - defaults to implicit */
 
         rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
@@ -621,12 +622,824 @@ static void test_close_with_acknowledge(void) {
         }
 }
 
+/**
+ * @brief Test close without acknowledge
+ *
+ * Verifies that when a consumer closes without acknowledging consumed records,
+ * those records are released back to the share group and can be consumed by
+ * another consumer.
+ *
+ * Test flow:
+ * 1. C1 consumes records but does NOT acknowledge them
+ * 2. C1 closes (should release the unacknowledged records)
+ * 3. C2 should be able to consume those same records
+ *
+ * Tests multiple topologies: 1t1p, 1t3p, 3t1p, 2t2p
+ */
+static void test_close_without_acknowledge(void) {
+        /**
+         * @brief Test configuration for close without acknowledge scenarios
+         */
+        typedef struct {
+                const char *test_name;
+                int topic_cnt;
+                int partitions[MAX_TOPICS];
+                int msgs_per_partition;
+        } close_no_ack_test_config_t;
+
+        /* Test matrix: various topologies */
+        close_no_ack_test_config_t tests[] = {
+            /* 1 topic, 1 partition */
+            {"close-no-ack-1t1p", 1, {1}, 20},
+
+            /* 1 topic, multiple partitions */
+            {"close-no-ack-1t3p", 1, {3}, 10},
+
+            /* Multiple topics, 1 partition each */
+            {"close-no-ack-3t1p", 3, {1, 1, 1}, 10},
+
+            /* Multiple topics, multiple partitions */
+            {"close-no-ack-2t2p", 2, {2, 2}, 10},
+        };
+
+        for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
+                close_no_ack_test_config_t *config = &tests[i];
+                test_context_t ctx                 = {0};
+                rd_kafka_share_t *c1, *c2;
+                rd_kafka_message_t *batch[BATCH_SIZE];
+                rd_kafka_error_t *error;
+                size_t c1_rcvd_msgs = 0;
+                int attempt;
+                tracked_msg_t c1_tracked_msgs[BATCH_SIZE];
+                int c1_tracked_cnt = 0;
+
+                TEST_SAY("\n========================================\n");
+                TEST_SAY("Test: %s\n", config->test_name);
+                TEST_SAY("Topology: %d topic(s), partitions: [",
+                         config->topic_cnt);
+                for (int j = 0; j < config->topic_cnt; j++) {
+                        TEST_SAY("%d%s", config->partitions[j],
+                                 j < config->topic_cnt - 1 ? ", " : "");
+                }
+                TEST_SAY("]\n");
+                TEST_SAY("========================================\n\n");
+
+                ctx.group_id = "0178-group-no-ack";
+                setup_topics_and_produce(&ctx, config->topic_cnt,
+                                         config->partitions,
+                                         config->msgs_per_partition);
+
+                /* Create C1 with implicit ack mode */
+                TEST_SAY("C1: Creating consumer\n");
+                c1 = create_implicit_ack_consumer(ctx.group_id);
+
+                /* Set group offset to earliest */
+                set_group_offset_earliest(c1, ctx.group_id);
+
+                /* Subscribe C1 */
+                subscribe_consumer(c1, ctx.topic_names, ctx.topic_cnt);
+
+                /* C1: Consume messages WITHOUT acknowledging */
+                TEST_SAY("C1: Consuming messages WITHOUT acknowledging...\n");
+
+                for (attempt = 0; attempt < 30 && c1_rcvd_msgs == 0; attempt++) {
+                        error = rd_kafka_share_consume_batch(c1, 3000, batch,
+                                                             &c1_rcvd_msgs);
+
+                        if (error) {
+                                TEST_SAY("C1: Attempt %d: error: %s\n",
+                                         attempt + 1,
+                                         rd_kafka_error_string(error));
+                                rd_kafka_error_destroy(error);
+                                continue;
+                        }
+
+                        if (c1_rcvd_msgs > 0) {
+                                TEST_SAY(
+                                    "C1: Received %d messages (NOT "
+                                    "acknowledging)\n",
+                                    (int)c1_rcvd_msgs);
+
+                                /* Track and destroy messages without
+                                 * acknowledging them */
+                                for (size_t i = 0; i < c1_rcvd_msgs; i++) {
+                                        if (!batch[i]->err) {
+                                                /* Track this message */
+                                                c1_tracked_msgs[c1_tracked_cnt]
+                                                    .topic = rd_strdup(
+                                                    rd_kafka_topic_name(
+                                                        batch[i]->rkt));
+                                                c1_tracked_msgs[c1_tracked_cnt]
+                                                    .partition =
+                                                    batch[i]->partition;
+                                                c1_tracked_msgs[c1_tracked_cnt]
+                                                    .offset = batch[i]->offset;
+                                                c1_tracked_cnt++;
+
+                                                TEST_SAY(
+                                                    "C1: Consumed (no ack): %s "
+                                                    "[%d] @ "
+                                                    "offset %llu\n",
+                                                    rd_kafka_topic_name(
+                                                        batch[i]->rkt),
+                                                    batch[i]->partition,
+                                                    batch[i]->offset);
+                                        }
+                                        rd_kafka_message_destroy(batch[i]);
+                                }
+                                break;
+                        }
+                }
+
+                TEST_ASSERT(c1_rcvd_msgs > 0,
+                            "C1: Expected to receive at least 1 message, got %d",
+                            (int)c1_rcvd_msgs);
+
+                TEST_ASSERT(c1_tracked_cnt == (int)c1_rcvd_msgs,
+                            "C1: Tracked %d messages but received %d",
+                            c1_tracked_cnt, (int)c1_rcvd_msgs);
+
+                TEST_SAY(
+                    "C1: Consumed and tracked %d messages that will be "
+                    "released "
+                    "on close\n",
+                    c1_tracked_cnt);
+
+                /* Close C1 without acknowledging - records should be released
+                 */
+                TEST_SAY("C1: Closing consumer WITHOUT acknowledging consumed "
+                         "records\n");
+                rd_kafka_share_consumer_close(c1);
+                TEST_SAY("C1: Closed successfully\n");
+                rd_kafka_share_destroy(c1);
+
+                /* Create C2 after C1 is destroyed */
+                TEST_SAY("C2: Creating consumer after C1 close\n");
+                c2 = create_implicit_ack_consumer(ctx.group_id);
+                subscribe_consumer(c2, ctx.topic_names, ctx.topic_cnt);
+
+                /* C2: Should be able to consume all records that C1 released
+                 * (C2 may receive additional messages beyond C1's released set)
+                 */
+                TEST_SAY("C2: Attempting to consume records released by C1 "
+                         "(expecting at least %d messages)...\n",
+                         c1_tracked_cnt);
+
+                int c2_matched_cnt = 0;
+                int c2_total_msgs  = 0;
+                rd_bool_t *c1_msg_matched =
+                    rd_calloc(c1_tracked_cnt, sizeof(*c1_msg_matched));
+
+                for (attempt = 0;
+                     attempt < 30 && c2_matched_cnt < c1_tracked_cnt;
+                     attempt++) {
+                        size_t batch_rcvd = 0;
+                        size_t i;
+
+                        error = rd_kafka_share_consume_batch(c2, 3000, batch,
+                                                             &batch_rcvd);
+
+                        if (error) {
+                                TEST_SAY("C2: Attempt %d: error: %s\n",
+                                         attempt + 1,
+                                         rd_kafka_error_string(error));
+                                rd_kafka_error_destroy(error);
+                                continue;
+                        }
+
+                        if (batch_rcvd == 0)
+                                continue;
+
+                        TEST_SAY("C2: Attempt %d: Received %d messages\n",
+                                 attempt + 1, (int)batch_rcvd);
+
+                        /* Check each received message against C1's tracked
+                         * messages */
+                        for (i = 0; i < batch_rcvd; i++) {
+                                rd_kafka_message_t *rkm = batch[i];
+                                int j;
+                                rd_bool_t found = rd_false;
+
+                                if (rkm->err) {
+                                        rd_kafka_message_destroy(rkm);
+                                        continue;
+                                }
+
+                                c2_total_msgs++;
+
+                                const char *topic = rd_kafka_topic_name(rkm->rkt);
+                                int32_t partition = rkm->partition;
+                                int64_t offset    = rkm->offset;
+
+                                /* Check if this message matches any from C1's
+                                 * tracked list */
+                                for (j = 0; j < c1_tracked_cnt; j++) {
+                                        if (!c1_msg_matched[j] &&
+                                            strcmp(topic,
+                                                   c1_tracked_msgs[j].topic) ==
+                                                0 &&
+                                            partition ==
+                                                c1_tracked_msgs[j].partition &&
+                                            offset ==
+                                                c1_tracked_msgs[j].offset) {
+                                                found = rd_true;
+                                                c1_msg_matched[j] = rd_true;
+                                                c2_matched_cnt++;
+
+                                                TEST_SAY(
+                                                    "C2: Matched C1 message "
+                                                    "%d/%d: "
+                                                    "%s [%d] @ offset %lld\n",
+                                                    c2_matched_cnt,
+                                                    c1_tracked_cnt, topic,
+                                                    partition, offset);
+                                                break;
+                                        }
+                                }
+
+                                if (!found) {
+                                        /* C2 received a message not in C1's
+                                         * list - this is OK, just log it */
+                                        TEST_SAY(
+                                            "C2: Received additional message "
+                                            "(not from C1): %s [%d] @ offset "
+                                            "%lld\n",
+                                            topic, partition, offset);
+                                }
+
+                                rd_kafka_message_destroy(rkm);
+                        }
+
+                        /* Break early if we've matched all C1 messages */
+                        if (c2_matched_cnt >= c1_tracked_cnt) {
+                                TEST_SAY(
+                                    "C2: All %d messages from C1 have been "
+                                    "matched, "
+                                    "breaking early (total received: %d)\n",
+                                    c1_tracked_cnt, c2_total_msgs);
+                                break;
+                        }
+                }
+
+                TEST_SAY("C2: Total received %d messages, matched %d/%d from "
+                         "C1\n",
+                         c2_total_msgs, c2_matched_cnt, c1_tracked_cnt);
+
+                /* Verify C2 received all the messages C1 released */
+                TEST_ASSERT(
+                    c2_matched_cnt == c1_tracked_cnt,
+                    "C2: Expected to receive all %d messages released by C1, "
+                    "matched only %d",
+                    c1_tracked_cnt, c2_matched_cnt);
+
+                /* Check if any C1 messages were not matched */
+                for (int j = 0; j < c1_tracked_cnt; j++) {
+                        if (!c1_msg_matched[j]) {
+                                TEST_FAIL("C2: Did not receive C1 message: "
+                                          "%s [%d] @ offset %lld",
+                                          c1_tracked_msgs[j].topic,
+                                          c1_tracked_msgs[j].partition,
+                                          c1_tracked_msgs[j].offset);
+                        }
+                }
+
+                TEST_SAY("C2: Successfully received all %d messages released "
+                         "by C1 "
+                         "(total messages received: %d)\n",
+                         c2_matched_cnt, c2_total_msgs);
+
+                rd_free(c1_msg_matched);
+
+                /* Close C2 */
+                TEST_SAY("C2: Closing consumer\n");
+                rd_kafka_share_consumer_close(c2);
+                TEST_SAY("C2: Closed successfully\n");
+                rd_kafka_share_destroy(c2);
+
+                /* Cleanup tracked messages */
+                free_tracked_messages(c1_tracked_msgs, c1_tracked_cnt);
+
+                /* Cleanup */
+                for (int t = 0; t < ctx.topic_cnt; t++) {
+                        rd_free(ctx.topic_names[t]);
+                }
+
+                TEST_SAY("Test %s completed successfully\n\n",
+                         config->test_name);
+        }
+}
+
+/**
+ * @brief Test close with slow broker response
+ *
+ * Verifies that close() waits for the broker to respond to the
+ * session close request (sent to partition leader), even when
+ * the broker is slow to respond.
+ *
+ * Tests 3 scenarios with a 3-broker setup:
+ * 1. Only broker 1 has delayed response (10s)
+ * 2. Brokers 1 and 2 have delayed responses (10s each)
+ * 3. All 3 brokers have delayed responses (10s each)
+ *
+ * In each case, close() should wait for the response and complete
+ * successfully after the delay.
+ */
+static void test_close_with_slow_broker_response(void) {
+        typedef struct {
+                const char *test_name;
+                int delayed_broker_cnt;
+                int32_t delayed_brokers[3];
+        } delay_test_config_t;
+
+        delay_test_config_t tests[] = {
+            {"1-broker-delayed", 1, {1, 0, 0}},
+            {"2-brokers-delayed", 2, {1, 2, 0}},
+            {"3-brokers-delayed", 3, {1, 2, 3}},
+        };
+
+        for (size_t test_idx = 0; test_idx < sizeof(tests) / sizeof(tests[0]);
+             test_idx++) {
+                delay_test_config_t *config = &tests[test_idx];
+                rd_kafka_mock_cluster_t *mcluster;
+                const char *bootstraps;
+                rd_kafka_t *producer;
+                rd_kafka_share_t *consumer;
+                rd_kafka_conf_t *conf;
+                const char *topic = "mock-close-delay";
+                char group[64];
+                const int msgcnt       = 10;
+                const int rtt_delay_ms = 10000; /* 10 seconds */
+                rd_kafka_message_t *batch[BATCH_SIZE];
+                rd_kafka_error_t *error;
+                size_t rcvd;
+                int consumed = 0;
+                int attempts = 0;
+                size_t i;
+                rd_ts_t t_start, t_elapsed_ms;
+                char errstr[512];
+
+                rd_snprintf(group, sizeof(group), "sg-close-delay-%s",
+                            config->test_name);
+
+                TEST_SAY("\n========================================\n");
+                TEST_SAY("Test: %s\n", config->test_name);
+                TEST_SAY("Delayed brokers: %d\n", config->delayed_broker_cnt);
+                TEST_SAY("========================================\n\n");
+
+                SUB_TEST("%s", config->test_name);
+
+                /* Create mock cluster with 3 brokers */
+                mcluster = test_mock_cluster_new(3, &bootstraps);
+
+                TEST_ASSERT(
+                    rd_kafka_mock_set_apiversion(
+                        mcluster, RD_KAFKAP_ShareGroupHeartbeat, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to enable ShareGroupHeartbeat");
+                TEST_ASSERT(
+                    rd_kafka_mock_set_apiversion(
+                        mcluster, RD_KAFKAP_ShareFetch, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to enable ShareFetch");
+                TEST_ASSERT(
+                    rd_kafka_mock_set_apiversion(
+                        mcluster, RD_KAFKAP_ShareAcknowledge, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to enable ShareAck");
+
+                /* Create topic */
+                TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
+                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Failed to create mock topic");
+
+                /* Create producer and produce messages */
+                test_conf_init(&conf, NULL, 0);
+                test_conf_set(conf, "bootstrap.servers", bootstraps);
+                producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
+                                        sizeof(errstr));
+                TEST_ASSERT(producer, "Failed to create producer: %s", errstr);
+
+                for (i = 0; i < msgcnt; i++) {
+                        char payload[64];
+                        rd_snprintf(payload, sizeof(payload), "%s-%d", topic,
+                                    (int)i);
+                        TEST_ASSERT(
+                            rd_kafka_producev(
+                                producer, RD_KAFKA_V_TOPIC(topic),
+                                RD_KAFKA_V_VALUE(payload, strlen(payload)),
+                                RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                                RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Produce failed");
+                }
+                rd_kafka_flush(producer, 5000);
+
+                /* Create consumer */
+                test_conf_init(&conf, NULL, 0);
+                test_conf_set(conf, "bootstrap.servers", bootstraps);
+                test_conf_set(conf, "group.id", group);
+
+                consumer =
+                    rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+                TEST_ASSERT(consumer, "Failed to create consumer: %s", errstr);
+
+                /* Subscribe */
+                rd_kafka_topic_partition_list_t *subs;
+                subs = rd_kafka_topic_partition_list_new(1);
+                rd_kafka_topic_partition_list_add(subs, topic,
+                                                  RD_KAFKA_PARTITION_UA);
+                TEST_ASSERT(!rd_kafka_share_subscribe(consumer, subs),
+                            "Subscribe failed");
+                rd_kafka_topic_partition_list_destroy(subs);
+
+                /* Consume some messages */
+                TEST_SAY("Consuming messages...\n");
+                while (consumed < msgcnt && attempts++ < 30) {
+                        rcvd  = 0;
+                        error = rd_kafka_share_consume_batch(consumer, 3000,
+                                                             batch, &rcvd);
+                        if (error) {
+                                rd_kafka_error_destroy(error);
+                                continue;
+                        }
+
+                        for (i = 0; i < rcvd; i++) {
+                                if (!batch[i]->err)
+                                        consumed++;
+                                rd_kafka_message_destroy(batch[i]);
+                        }
+                }
+
+                TEST_SAY("Consumed %d messages\n", consumed);
+                TEST_ASSERT(consumed == msgcnt, "Expected %d messages, got %d",
+                            msgcnt, consumed);
+
+                /* Inject RTT delay on specified brokers
+                 * This will delay responses from partition leaders including
+                 * the session close request sent during close() */
+                for (i = 0; i < config->delayed_broker_cnt; i++) {
+                        TEST_SAY("Injecting %dms RTT delay on broker %d\n",
+                                 rtt_delay_ms, config->delayed_brokers[i]);
+                        rd_kafka_mock_broker_set_rtt(
+                            mcluster, config->delayed_brokers[i], rtt_delay_ms);
+                }
+
+                /* Call close and measure time
+                 * close() should send session close request to partition
+                 * leader and wait for the response */
+                TEST_SAY(
+                    "Calling close() with delayed broker response(s)...\n");
+                t_start      = test_clock();
+                rd_kafka_share_consumer_close(consumer);
+                t_elapsed_ms = (test_clock() - t_start) / 1000;
+
+                TEST_SAY("Close completed after %" PRId64 " ms\n",
+                         t_elapsed_ms);
+
+                /* Verify close waited for the delayed response
+                 * Should take approximately rtt_delay_ms
+                 * Allow range: (rtt_delay_ms - 1000ms) to (rtt_delay_ms +
+                 * 2000ms) */
+                int64_t min_expected_ms = rtt_delay_ms - 1000;
+                int64_t max_expected_ms = rtt_delay_ms + 2000;
+
+                TEST_ASSERT(
+                    t_elapsed_ms >= min_expected_ms &&
+                        t_elapsed_ms <= max_expected_ms,
+                    "Close took %" PRId64
+                    " ms, expected between %" PRId64 " and %" PRId64
+                    " ms (with %d broker(s) delayed by %dms)",
+                    t_elapsed_ms, min_expected_ms, max_expected_ms,
+                    config->delayed_broker_cnt, rtt_delay_ms);
+
+                TEST_SAY("SUCCESS: Close waited approximately %dms for "
+                         "delayed broker response(s)\n",
+                         rtt_delay_ms);
+
+                rd_kafka_share_destroy(consumer);
+                rd_kafka_destroy(producer);
+                test_mock_cluster_destroy(mcluster);
+
+                SUB_TEST_PASS();
+        }
+}
+
+/**
+ * @brief Test close respects socket timeout with very slow broker
+ *
+ * Verifies that when broker takes longer than socket.timeout.ms (60s)
+ * to respond to the session close request, close() should timeout and
+ * not wait indefinitely.
+ *
+ * Setup:
+ * - Single broker with 80s RTT delay (exceeds 60s socket timeout)
+ * - close() should timeout around 60s, not wait for full 80s
+ */
+static void test_close_respects_socket_timeout(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_t *producer;
+        rd_kafka_share_t *consumer;
+        rd_kafka_conf_t *conf;
+        const char *topic        = "mock-close-timeout";
+        const char *group        = "sg-close-timeout";
+        const int msgcnt         = 10;
+        const int rtt_delay_ms   = 80000; /* 80 seconds - exceeds socket timeout */
+        const int socket_timeout_ms = 60000; /* 60 seconds */
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_error_t *error;
+        size_t rcvd;
+        int consumed = 0;
+        int attempts = 0;
+        size_t i;
+        rd_ts_t t_start, t_elapsed_ms;
+        char errstr[512];
+
+        SUB_TEST("close-respects-socket-timeout");
+
+        TEST_SAY("\n========================================\n");
+        TEST_SAY("Test: close respects socket timeout\n");
+        TEST_SAY("Broker delay: %dms, Socket timeout: %dms\n",
+                 rtt_delay_ms, socket_timeout_ms);
+        TEST_SAY("========================================\n\n");
+
+        /* Create mock cluster with single broker */
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+
+        TEST_ASSERT(rd_kafka_mock_set_apiversion(
+                        mcluster, RD_KAFKAP_ShareGroupHeartbeat, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to enable ShareGroupHeartbeat");
+        TEST_ASSERT(rd_kafka_mock_set_apiversion(
+                        mcluster, RD_KAFKAP_ShareFetch, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to enable ShareFetch");
+        TEST_ASSERT(rd_kafka_mock_set_apiversion(
+                        mcluster, RD_KAFKAP_ShareAcknowledge, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to enable ShareAck");
+
+        /* Create topic */
+        TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+
+        /* Create producer and produce messages */
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
+                                sizeof(errstr));
+        TEST_ASSERT(producer, "Failed to create producer: %s", errstr);
+
+        for (i = 0; i < msgcnt; i++) {
+                char payload[64];
+                rd_snprintf(payload, sizeof(payload), "%s-%d", topic, (int)i);
+                TEST_ASSERT(rd_kafka_producev(
+                                producer, RD_KAFKA_V_TOPIC(topic),
+                                RD_KAFKA_V_VALUE(payload, strlen(payload)),
+                                RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                                RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Produce failed");
+        }
+        rd_kafka_flush(producer, 5000);
+
+        /* Create consumer with explicit socket timeout */
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.id", group);
+        /* Set socket.timeout.ms to 60 seconds */
+        rd_snprintf(errstr, sizeof(errstr), "%d", socket_timeout_ms);
+        test_conf_set(conf, "socket.timeout.ms", errstr);
+
+        consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(consumer, "Failed to create consumer: %s", errstr);
+
+        /* Subscribe */
+        rd_kafka_topic_partition_list_t *subs;
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        TEST_ASSERT(!rd_kafka_share_subscribe(consumer, subs),
+                    "Subscribe failed");
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Consume some messages */
+        TEST_SAY("Consuming messages...\n");
+        while (consumed < msgcnt && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(consumer, 3000, batch,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (i = 0; i < rcvd; i++) {
+                        if (!batch[i]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(batch[i]);
+                }
+        }
+
+        TEST_SAY("Consumed %d messages\n", consumed);
+        TEST_ASSERT(consumed == msgcnt, "Expected %d messages, got %d", msgcnt,
+                    consumed);
+
+        /* Inject 80s RTT delay on broker (exceeds 60s socket timeout)
+         * This will cause the session close request to timeout */
+        TEST_SAY("Injecting %dms RTT delay on broker 1 (exceeds socket "
+                 "timeout)\n",
+                 rtt_delay_ms);
+        rd_kafka_mock_broker_set_rtt(mcluster, 1, rtt_delay_ms);
+
+        /* Call close and measure time
+         * close() should timeout around socket.timeout.ms (60s)
+         * and NOT wait for the full 80s broker delay */
+        TEST_SAY("Calling close() - should timeout around %dms...\n",
+                 socket_timeout_ms);
+        t_start      = test_clock();
+        rd_kafka_share_consumer_close(consumer);
+        t_elapsed_ms = (test_clock() - t_start) / 1000;
+
+        TEST_SAY("Close completed after %" PRId64 " ms\n", t_elapsed_ms);
+
+        /* Verify close did NOT wait for full 80s delay
+         * Should timeout around socket.timeout.ms (60s)
+         * Allow range: 55s to 65s (socket timeout ± 5s margin) */
+        int64_t min_expected_ms = socket_timeout_ms - 5000;
+        int64_t max_expected_ms = socket_timeout_ms + 5000;
+
+        TEST_ASSERT(t_elapsed_ms >= min_expected_ms &&
+                        t_elapsed_ms <= max_expected_ms,
+                    "Close took %" PRId64
+                    " ms, expected timeout around %dms "
+                    "(between %" PRId64 " and %" PRId64 " ms). "
+                    "Should NOT wait for full broker delay of %dms",
+                    t_elapsed_ms, socket_timeout_ms, min_expected_ms,
+                    max_expected_ms, rtt_delay_ms);
+
+        /* Also verify it definitely did NOT wait for the full 80s */
+        TEST_ASSERT(t_elapsed_ms < 70000,
+                    "Close took %" PRId64
+                    " ms, which is too close to broker delay "
+                    "of %dms. Should have timed out at socket.timeout.ms=%dms",
+                    t_elapsed_ms, rtt_delay_ms, socket_timeout_ms);
+
+        TEST_SAY("SUCCESS: Close respected socket timeout (%dms) and did not "
+                 "wait for full broker delay (%dms)\n",
+                 socket_timeout_ms, rtt_delay_ms);
+
+        rd_kafka_share_destroy(consumer);
+        rd_kafka_destroy(producer);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Test close with broker error response
+ *
+ * Verifies that close() handles error responses from the broker gracefully.
+ * When the broker responds with an error to the ShareAcknowledge request
+ * (session close request), close() should handle it without retrying.
+ *
+ * This test injects a COORDINATOR_NOT_AVAILABLE error response and verifies
+ * that close() completes (errors during close are not retriable).
+ */
+static void test_close_with_broker_error_response(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_t *producer;
+        rd_kafka_share_t *consumer;
+        rd_kafka_conf_t *conf;
+        const char *topic              = "mock-close-error";
+        const char *group              = "sg-close-error";
+        const int msgcnt               = 10;
+        rd_kafka_resp_err_t error_code = RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE;
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_error_t *error;
+        size_t rcvd;
+        int consumed = 0;
+        int attempts = 0;
+        size_t i;
+        char errstr[512];
+
+        SUB_TEST("close-with-broker-error");
+
+        TEST_SAY("\n========================================\n");
+        TEST_SAY("Test: Close with broker error response\n");
+        TEST_SAY("Error code: %s\n", rd_kafka_err2str(error_code));
+        TEST_SAY("========================================\n\n");
+
+        /* Create mock cluster with single broker */
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+
+        TEST_ASSERT(rd_kafka_mock_set_apiversion(
+                        mcluster, RD_KAFKAP_ShareGroupHeartbeat, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to enable ShareGroupHeartbeat");
+        TEST_ASSERT(rd_kafka_mock_set_apiversion(
+                        mcluster, RD_KAFKAP_ShareFetch, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to enable ShareFetch");
+        TEST_ASSERT(rd_kafka_mock_set_apiversion(
+                        mcluster, RD_KAFKAP_ShareAcknowledge, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to enable ShareAck");
+
+        /* Create topic */
+        TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+
+        /* Create producer and produce messages */
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
+                                sizeof(errstr));
+        TEST_ASSERT(producer, "Failed to create producer: %s", errstr);
+
+        for (i = 0; i < msgcnt; i++) {
+                char payload[64];
+                rd_snprintf(payload, sizeof(payload), "%s-%d", topic, (int)i);
+                TEST_ASSERT(
+                    rd_kafka_producev(
+                        producer, RD_KAFKA_V_TOPIC(topic),
+                        RD_KAFKA_V_VALUE(payload, strlen(payload)),
+                        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                        RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Produce failed");
+        }
+        rd_kafka_flush(producer, 5000);
+
+        /* Create consumer */
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.id", group);
+
+        consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(consumer, "Failed to create consumer: %s", errstr);
+
+        /* Subscribe */
+        rd_kafka_topic_partition_list_t *subs;
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        TEST_ASSERT(!rd_kafka_share_subscribe(consumer, subs),
+                    "Subscribe failed");
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Consume some messages */
+        TEST_SAY("Consuming messages...\n");
+        while (consumed < msgcnt && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(consumer, 3000, batch,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (i = 0; i < rcvd; i++) {
+                        if (!batch[i]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(batch[i]);
+                }
+        }
+
+        TEST_SAY("Consumed %d messages\n", consumed);
+        TEST_ASSERT(consumed == msgcnt, "Expected %d messages, got %d", msgcnt,
+                    consumed);
+
+        /* Inject error response for ShareAcknowledge (session close request).
+         * Since errors during close() are not retriable, we inject a single
+         * error response. close() should handle it gracefully and complete. */
+        TEST_SAY("Injecting %s error for ShareAcknowledge\n",
+                 rd_kafka_err2str(error_code));
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 1, RD_KAFKAP_ShareAcknowledge, 1, error_code, 0);
+
+        /* Call close - should complete despite the error
+         * (errors during close are not retriable) */
+        TEST_SAY("Calling close() - should complete despite error...\n");
+        rd_kafka_share_consumer_close(consumer);
+        TEST_SAY("Close completed\n");
+
+        TEST_SAY("SUCCESS: Close handled error %s gracefully (no retry)\n",
+                 rd_kafka_err2str(error_code));
+
+        rd_kafka_share_destroy(consumer);
+        rd_kafka_destroy(producer);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
 int main_0178_share_consumer_close(int argc, char **argv) {
         /* Set overall timeout for all tests */
         test_timeout_set(600); /* 10 minutes */
-        test_close_with_acknowledge();
-
-        // test_close_without_acknowledge();
+         test_close_with_acknowledge();
+         test_close_without_acknowledge();
+        test_close_with_slow_broker_response();
+        test_close_respects_socket_timeout();
+        test_close_with_broker_error_response();
 
         return 0;
 }
