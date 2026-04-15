@@ -233,9 +233,43 @@ blocks:
       agent:
         machine:
           type: s1-prod-windows
+      env_vars:
+        - name: VCPKG_DISABLE_METRICS
+          value: 'yes'
+        - name: triplet
+          value: x64-windows
+      prologue:
+        commands:
+          # Setup vcpkg and build librdkafka
+          - cd ..
+          - "& .\\librdkafka\\win32\\setup-vcpkg.ps1"
+          - cd librdkafka
+          - "& .\\win32\\msbuild.ps1 -platform x64"
+          # Install Java
+          - Invoke-WebRequest -Uri "https://aka.ms/download-jdk/microsoft-jdk-21-windows-x64.msi" -OutFile C:\jdk21.msi -UseBasicParsing
+          - Start-Process msiexec.exe -Wait -ArgumentList '/i', 'C:\jdk21.msi', '/quiet', 'ADDLOCAL=FeatureMain,FeatureEnvironment,FeatureJarFileRunWith,FeatureJavaHome'
+          - $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
+      epilogue:
+        commands:
+          - try { Stop-Job -Name kafka-broker } catch {}
       jobs:
-        - name: 'Debug: SSH into Windows machine'
+        - name: 'Build and run share consumer tests'
           commands:
+            # Download and extract Kafka
+            - Invoke-WebRequest -Uri "https://archive.apache.org/dist/kafka/${env:KAFKA_VERSION}/kafka_2.13-${env:KAFKA_VERSION}.tgz" -OutFile C:\kafka.tgz -UseBasicParsing
+            - tar -xzf C:\kafka.tgz -C C:\
+            # Add share consumer config
+            - Add-Content "C:\kafka_2.13-${env:KAFKA_VERSION}\config\server.properties" "`ngroup.share.min.record.lock.duration.ms=1000`ntransaction.state.log.replication.factor=1`ntransaction.state.log.min.isr=1"
+            # Format storage and start broker
+            - $env:KAFKA_CLUSTER_ID = & "C:\kafka_2.13-${env:KAFKA_VERSION}\bin\windows\kafka-storage.bat" random-uuid
+            - "& C:\\kafka_2.13-${env:KAFKA_VERSION}\\bin\\windows\\kafka-storage.bat format --standalone -t $env:KAFKA_CLUSTER_ID -c C:\\kafka_2.13-${env:KAFKA_VERSION}\\config\\server.properties"
+            - Start-Job -Name kafka-broker -ScriptBlock { param($v) & "C:\kafka_2.13-$v\bin\windows\kafka-server-start.bat" "C:\kafka_2.13-$v\config\server.properties" } -ArgumentList $env:KAFKA_VERSION
+            - Start-Sleep 15
+            # Write test config and run share consumer tests
+            - cd tests
+            - Set-Content test.conf "bootstrap.servers=localhost:9092`nbroker.address.family=v4"
+            - $env:RDKAFKA_TEST_CONF = "test.conf"; $env:TESTS_SKIP_BEFORE = "0170"; & ..\win32\outdir\v142\x64\Release\tests.exe
+            # DEBUG: Sleep 3 hours for SSH debugging
             - Start-Sleep -Seconds 10800
 
   - name: 'Linux x64: release artifact docker builds'
