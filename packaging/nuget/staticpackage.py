@@ -247,8 +247,39 @@ class StaticPackage(Package):
     # dynamic linkage, by specifying negative match '!extra': 'gssapi'.
     # Except for on OSX where cyrus-sasl is always available, and
     # Windows where it is never linked.
-    #
-    # PR-only Mac build: keep only OSX entries.
+
+    # OSX-only mappings (kept for reference, superseded by the active mappings below)
+#     mappings = [
+#         # osx x64 static lib and pkg-config file
+#         Mapping(
+#             {'arch': 'x64', 'plat': 'osx', 'lnk': 'all'},
+#             'librdkafka.tgz',
+#             './usr/local/lib/librdkafka-static.a',
+#             'librdkafka_darwin_amd64.a',
+#         ),
+#         Mapping(
+#             {'arch': 'x64', 'plat': 'osx', 'lnk': 'all'},
+#             'librdkafka.tgz',
+#             './usr/local/lib/pkgconfig/rdkafka-static.pc',
+#             'librdkafka_darwin_amd64.pc',
+#         ),
+#
+#         # osx arm64 static lib and pkg-config file
+#         Mapping(
+#             {'arch': 'arm64', 'plat': 'osx', 'lnk': 'all'},
+#             'librdkafka.tgz',
+#             './usr/local/lib/librdkafka-static.a',
+#             'librdkafka_darwin_arm64.a',
+#         ),
+#         Mapping(
+#             {'arch': 'arm64', 'plat': 'osx', 'lnk': 'all'},
+#             'librdkafka.tgz',
+#             './usr/local/lib/pkgconfig/rdkafka-static.pc',
+#             'librdkafka_darwin_arm64.pc',
+#         ),
+#     ]
+
+    # OSX + Linux mappings
     mappings = [
         # osx x64 static lib and pkg-config file
         Mapping(
@@ -276,6 +307,70 @@ class StaticPackage(Package):
             'librdkafka.tgz',
             './usr/local/lib/pkgconfig/rdkafka-static.pc',
             'librdkafka_darwin_arm64.pc',
+        ),
+
+        # glibc linux x64 static lib and pkg-config file
+        Mapping(
+            {'arch': 'x64', 'plat': 'linux', 'dist': 'centos8',
+             'lnk': 'all', '!extra': 'gssapi'},
+            'librdkafka.tgz',
+            './usr/local/lib/librdkafka-static.a',
+            'librdkafka_glibc_linux_amd64.a',
+        ),
+        Mapping(
+            {'arch': 'x64', 'plat': 'linux', 'dist': 'centos8',
+             'lnk': 'all', '!extra': 'gssapi'},
+            'librdkafka.tgz',
+            './usr/local/lib/pkgconfig/rdkafka-static.pc',
+            'librdkafka_glibc_linux_amd64.pc',
+        ),
+
+        # glibc linux arm64 static lib and pkg-config file
+        Mapping(
+            {'arch': 'arm64', 'plat': 'linux', 'dist': 'centos8',
+             'lnk': 'all', '!extra': 'gssapi'},
+            'librdkafka.tgz',
+            './usr/local/lib/librdkafka-static.a',
+            'librdkafka_glibc_linux_arm64.a',
+        ),
+        Mapping(
+            {'arch': 'arm64', 'plat': 'linux', 'dist': 'centos8',
+             'lnk': 'all', '!extra': 'gssapi'},
+            'librdkafka.tgz',
+            './usr/local/lib/pkgconfig/rdkafka-static.pc',
+            'librdkafka_glibc_linux_arm64.pc',
+        ),
+
+        # musl linux x64 static lib and pkg-config file
+        Mapping(
+            {'arch': 'x64', 'plat': 'linux', 'dist': 'alpine',
+             'lnk': 'all', '!extra': 'gssapi'},
+            'librdkafka.tgz',
+            './usr/local/lib/librdkafka-static.a',
+            'librdkafka_musl_linux_amd64.a',
+        ),
+        Mapping(
+            {'arch': 'x64', 'plat': 'linux', 'dist': 'alpine',
+             'lnk': 'all', '!extra': 'gssapi'},
+            'librdkafka.tgz',
+            './usr/local/lib/pkgconfig/rdkafka-static.pc',
+            'librdkafka_musl_linux_amd64.pc',
+        ),
+
+        # musl linux arm64 static lib and pkg-config file
+        Mapping(
+            {'arch': 'arm64', 'plat': 'linux', 'dist': 'alpine',
+             'lnk': 'all', '!extra': 'gssapi'},
+            'librdkafka.tgz',
+            './usr/local/lib/librdkafka-static.a',
+            'librdkafka_musl_linux_arm64.a',
+        ),
+        Mapping(
+            {'arch': 'arm64', 'plat': 'linux', 'dist': 'alpine',
+             'lnk': 'all', '!extra': 'gssapi'},
+            'librdkafka.tgz',
+            './usr/local/lib/pkgconfig/rdkafka-static.pc',
+            'librdkafka_musl_linux_arm64.pc',
         ),
     ]
 
