@@ -53,7 +53,9 @@ if [[ "$OS" == "Darwin" ]]; then
 
     # Determine the macOS deployment target for -platform_version.
     # Falls back to 13.0 if not set (matches the Semaphore global env var).
+    # Normalize to major.minor format — ld rejects bare integers like '13'.
     _min="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
+    [[ "$_min" == *.* ]] || _min="${_min}.0"
 
     # Use ld -r directly with -platform_version to avoid the Apple linker's
     # "Missing -platform_version option" error when called outside a full link.
