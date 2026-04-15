@@ -3524,7 +3524,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_ON_RKB;
 
                 if (rktp->rktp_next_broker) {
-                        /* There is a next broker we  need to migrate to. */
+                        /* There is a next broker we need to migrate to. */
                         rko->rko_type = RD_KAFKA_OP_PARTITION_JOIN;
                         rd_kafka_q_enq(rktp->rktp_next_broker->rkb_ops, rko);
                         rko = NULL;

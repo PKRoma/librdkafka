@@ -3262,7 +3262,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                  * to this broker so they don't leak _IN_PROGRESS to
                  * the caller. */
 
-                rkcg->rkcg_commit_sync_request.wait_broker_result_count--;
+                rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt--;
 
                 rd_kafka_dbg(
                     rk, CGRP, "SHARE",
@@ -3270,7 +3270,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                     "remaining brokers: %d",
                     rd_kafka_broker_name(reply_rkb),
                     rd_kafka_err2str(rko_orig->rko_err),
-                    rkcg->rkcg_commit_sync_request.wait_broker_result_count);
+                    rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt);
 
                 rd_kafka_share_commit_sync_maybe_complete(rk, rkcg);
         }
@@ -3379,7 +3379,7 @@ rd_kafka_share_fetch_fanout_reply_op(rd_kafka_t *rk, rd_kafka_op_t *rko_orig) {
         return RD_KAFKA_OP_RES_HANDLED;
 }
 
-/*
+/**
  * @brief Create and enqueue a SHARE_FETCH op on a broker.
  *
  * Moves any cached ack details from rkb_share_async_ack_details
@@ -3412,6 +3412,9 @@ static void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
         rko_sf->rko_u.share_fetch.target_broker = rkb;
         rko_sf->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
 
+        /* Set fetch guard flag to prevent multiple in-flight fetches to the
+         * same broker.*/
+        rd_assert(!rkb->rkb_share_fetch_enqueued);
         rkb->rkb_share_fetch_enqueued = rd_true;
 
         if (should_fetch)
@@ -3782,17 +3785,17 @@ static void rd_kafka_share_commit_sync_send_response(rd_kafka_cgrp_t *rkcg) {
 
         rd_kafka_q_enq(rkcg->rkcg_commit_sync_request.replyq, rko_reply);
 
-        rkcg->rkcg_commit_sync_request.id                       = 0;
-        rkcg->rkcg_commit_sync_request.results                  = NULL;
-        rkcg->rkcg_commit_sync_request.replyq                   = NULL;
-        rkcg->rkcg_commit_sync_request.abs_timeout              = 0;
-        rkcg->rkcg_commit_sync_request.wait_broker_result_count = 0;
+        rkcg->rkcg_commit_sync_request.id                          = 0;
+        rkcg->rkcg_commit_sync_request.results                     = NULL;
+        rkcg->rkcg_commit_sync_request.replyq                      = NULL;
+        rkcg->rkcg_commit_sync_request.abs_timeout                 = 0;
+        rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt = 0;
 }
 
 /**
  * @brief Check if all broker results are in and send response if done.
  *
- * Called after each broker reply arrives. If wait_broker_result_count
+ * Called after each broker reply arrives. If brokers_awaiting_result_cnt
  * reaches zero, stops the timeout timer and sends the response op
  * to the app thread's temp queue.
  *
@@ -3803,7 +3806,7 @@ static void rd_kafka_share_commit_sync_send_response(rd_kafka_cgrp_t *rkcg) {
  */
 static void rd_kafka_share_commit_sync_maybe_complete(rd_kafka_t *rk,
                                                       rd_kafka_cgrp_t *rkcg) {
-        if (rkcg->rkcg_commit_sync_request.wait_broker_result_count > 0)
+        if (rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt > 0)
                 return;
 
         rd_kafka_timer_stop(&rk->rk_timers, &rkcg->rkcg_commit_sync_request.tmr,
@@ -3830,10 +3833,11 @@ static void rd_kafka_share_commit_sync_timeout_cb(rd_kafka_timers_t *rkts,
         rd_kafka_topic_partition_list_t *results;
         int i;
 
-        rd_kafka_dbg(rk, CGRP, "SHARE",
-                     "Commit sync timeout fired, "
-                     "pending brokers: %d",
-                     rkcg->rkcg_commit_sync_request.wait_broker_result_count);
+        rd_kafka_dbg(
+            rk, CGRP, "SHARE",
+            "Commit sync timeout fired, "
+            "pending brokers: %d",
+            rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt);
 
         /* Move pending_commit_sync acks to async_ack_details */
         rd_kafka_rdlock(rk);
@@ -3858,7 +3862,9 @@ static void rd_kafka_share_commit_sync_timeout_cb(rd_kafka_timers_t *rkts,
         }
         rd_kafka_rdunlock(rk);
 
-        /* Fill partitions still IN_PROGRESS with REQUEST_TIMED_OUT */
+        /* TODO: Verify that __TIMED_OUT (local timeout) is the correct
+         *  error here rather than REQUEST_TIMED_OUT (broker error). */
+        /* Fill partitions still IN_PROGRESS with __TIMED_OUT */
         results = rkcg->rkcg_commit_sync_request.results;
         for (i = 0; i < results->cnt; i++) {
                 rd_kafka_topic_partition_t *rktpar = &results->elems[i];
@@ -3952,6 +3958,13 @@ static void rd_kafka_share_segregate_sync_acks_by_leader(rd_kafka_t *rk,
                         if (result_rktpar)
                                 result_rktpar->err =
                                     RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
+                        else
+                                rd_kafka_dbg(rk, CGRP, "SHARE",
+                                             "Sync ack batch for %s [%" PRId32
+                                             "]: partition not found in "
+                                             "commit_sync results",
+                                             batch->rktpar->topic,
+                                             batch->rktpar->partition);
 
                         rd_kafka_dbg(rk, CGRP, "SHARE",
                                      "Sync ack batch for %s [%" PRId32
@@ -4003,7 +4016,7 @@ static void rd_kafka_share_segregate_sync_acks_by_leader(rd_kafka_t *rk,
  * @brief Dispatch pending sync ack requests to free brokers.
  *
  * Phase 2 of sync dispatch: iterates all brokers. For each broker
- * that has pending_commit_sync, increments wait_broker_result_count.
+ * that has pending_commit_sync, increments brokers_awaiting_result_cnt.
  * If the broker is free (no inflight request), dispatches the
  * pending sync acks immediately.
  *
@@ -4021,7 +4034,7 @@ static void rd_kafka_share_dispatch_pending_sync_acks(rd_kafka_t *rk,
                 if (!rkb->rkb_pending_commit_sync.sync_ack_details)
                         continue;
 
-                rkcg->rkcg_commit_sync_request.wait_broker_result_count++;
+                rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt++;
 
                 if (rkb->rkb_share_fetch_enqueued ||
                     rd_kafka_broker_or_instance_terminating(rkb)) {
@@ -4064,16 +4077,17 @@ rd_kafka_op_res_t rd_kafka_share_commit_sync_fanout_op(rd_kafka_t *rk,
         rko->rko_u.share_commit_sync_fanout.results     = NULL;
 
         /* Initialize commit_sync request state */
-        rkcg->rkcg_share.commit_sync_id_counter++;
-        if (rkcg->rkcg_share.commit_sync_id_counter == INT64_MAX)
-                rkcg->rkcg_share.commit_sync_id_counter = 1;
+        rkcg->rkcg_share.commit_sync_request_id_counter++;
+        if (rkcg->rkcg_share.commit_sync_request_id_counter == INT64_MAX)
+                rkcg->rkcg_share.commit_sync_request_id_counter = 1;
         rkcg->rkcg_commit_sync_request.id =
-            rkcg->rkcg_share.commit_sync_id_counter;
+            rkcg->rkcg_share.commit_sync_request_id_counter;
         rkcg->rkcg_commit_sync_request.abs_timeout = abs_timeout;
         rkcg->rkcg_commit_sync_request.replyq      = rko->rko_replyq.q;
-        rko->rko_replyq.q = NULL; /* Take ownership of replyq */
-        rkcg->rkcg_commit_sync_request.results                  = results;
-        rkcg->rkcg_commit_sync_request.wait_broker_result_count = 0;
+        rkcg->rkcg_commit_sync_request.results     = results;
+        rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt = 0;
+
+        rko->rko_replyq.q = NULL; /* Ownership transferred to rkcg */
 
         /* Initialize all partition errors to IN_PROGRESS sentinel */
         for (i = 0; i < results->cnt; i++)
@@ -4100,7 +4114,7 @@ rd_kafka_op_res_t rd_kafka_share_commit_sync_fanout_op(rd_kafka_t *rk,
         /* Phase 2: Dispatch pending sync acks to free brokers */
         rd_kafka_share_dispatch_pending_sync_acks(rk, rkcg);
 
-        if (rkcg->rkcg_commit_sync_request.wait_broker_result_count == 0) {
+        if (rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt == 0) {
                 rd_kafka_dbg(rk, CGRP, "SHARE",
                              "No brokers available for commit sync, "
                              "sending immediate response");
@@ -4121,7 +4135,7 @@ rd_kafka_op_res_t rd_kafka_share_commit_sync_fanout_op(rd_kafka_t *rk,
         rd_kafka_dbg(rk, CGRP, "SHARE",
                      "Commit sync fanout: waiting for %d broker results, "
                      "timeout in %" PRId64 " ms",
-                     rkcg->rkcg_commit_sync_request.wait_broker_result_count,
+                     rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt,
                      timeout_us / 1000);
 
         return RD_KAFKA_OP_RES_HANDLED;
@@ -4152,6 +4166,7 @@ rd_kafka_error_t *rd_kafka_share_commit_async(rd_kafka_share_t *rkshare) {
                                           "Consumer already closed");
 
         rd_kafka_dbg(rk, CGRP, "SHARE", "Committing asynchronously");
+
         /* Drain rk_rep for all pending callbacks (non-blocking) */
         rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
                          rd_kafka_poll_cb, NULL);
@@ -4227,7 +4242,7 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
 
         if (!ack_batches) {
                 rd_kafka_dbg(rk, CGRP, "SHARE",
-                             "No pending acknowledgements to commit sync");
+                             "No pending acknowledgements to commit");
                 return NULL;
         }
 

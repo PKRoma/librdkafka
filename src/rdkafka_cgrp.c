@@ -6191,7 +6191,6 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
         /* Mark for stopping, the actual state transition
          * is performed when all toppars have left. */
         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_TERMINATE;
-
         if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
                 rkcg->rkcg_consumer_flags &=
                     ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN &

@@ -415,13 +415,13 @@ typedef struct rd_kafka_cgrp_s {
                                                            * a leave request
                                                            *    @locality main
                                                            * thread */
-                int64_t commit_sync_id_counter; /**< Global counter for
-                                                 *   commit_sync request
-                                                 *   IDs. Starts at 1,
-                                                 *   wraps to 1 at
-                                                 *   INT64_MAX.
-                                                 *   @locality main
-                                                 *   thread */
+                int64_t commit_sync_request_id_counter; /**< Global counter for
+                                                         *   commit_sync request
+                                                         *   IDs. Starts at 1,
+                                                         *   wraps to 1 at
+                                                         *   INT64_MAX.
+                                                         *   @locality main
+                                                         *   thread */
         } rkcg_share;
 
         /**
@@ -433,24 +433,24 @@ typedef struct rd_kafka_cgrp_s {
          */
         struct {
                 int64_t id;          /**< Current request ID from
-                                      *   rkcg_share.commit_sync_id_counter.
+                                      *   rkcg_share.commit_sync_request_id_counter.
                                       *   Set on each new commit_sync call.
                                       *   Reset to 0 when the reply is sent.
                                       *   0 means no active request. */
                 rd_ts_t abs_timeout; /**< Absolute timeout for the
                                       *   commit_sync request. */
                 rd_kafka_topic_partition_list_t
-                    *results;                 /**< Partition-to-error mapping.
-                                               *   Populated as broker replies
-                                               *   arrive. */
-                int wait_broker_result_count; /**< Number of broker
-                                               *   results still
-                                               *   pending. */
-                rd_kafka_q_t *replyq;         /**< App thread's temp queue
-                                               *   to send response to. */
-                rd_kafka_timer_t tmr;         /**< Timeout timer. Fires at
-                                               *   abs_timeout to send
-                                               *   timeout response. */
+                    *results; /**< Partition-to-error mapping.
+                               *   Populated as broker replies
+                               *   arrive. */
+                int brokers_awaiting_result_cnt; /**< Number of broker
+                                                  *   results still
+                                                  *   pending. */
+                rd_kafka_q_t *replyq;            /**< App thread's temp queue
+                                                  *   to send response to. */
+                rd_kafka_timer_t tmr;            /**< Timeout timer. Fires at
+                                                  *   abs_timeout to send
+                                                  *   timeout response. */
         } rkcg_commit_sync_request;
 } rd_kafka_cgrp_t;
 

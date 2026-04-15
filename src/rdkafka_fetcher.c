@@ -2639,7 +2639,6 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
         return;
 }
 
-
 /**
  * @brief Build and send a ShareAcknowledge request.
  *
