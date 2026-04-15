@@ -12,7 +12,9 @@
 #   mklove/partial-link-aws.sh <cxx-compiler> <libaws-1.a> [<libaws-2.a> ...]
 #
 # All input archives must reside in the same directory.
-# On success, produces <dir>/libaws-merged.a and removes the input archives.
+# On success, produces <dir>/libaws-merged.a alongside the input archives.
+# The input archives are kept so that LIBS-based linking (examples, tests)
+# can still resolve the individual archive paths from Makefile.config.
 #
 # The CXX compiler driver is used (rather than ld directly) so that the
 # correct target triple and platform flags are picked up automatically.
@@ -76,8 +78,5 @@ rm -f "$MERGED_OBJ"
 # Strip local symbol table entries (-x) and debug info (-S).
 # The object code is untouched; only non-global C++ mangled names are removed.
 strip -Sx "$MERGED_AR"
-
-# Remove the original per-library archives — the merged archive replaces them.
-rm -f "$@"
 
 echo "### AWS partial-link complete: $(du -sh "$MERGED_AR" | cut -f1) ${MERGED_AR}"
