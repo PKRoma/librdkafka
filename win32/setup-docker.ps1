@@ -24,11 +24,27 @@ Invoke-WebRequest -Uri $dockerUrl -OutFile $installer -UseBasicParsing
 Write-Host "Installing Docker Desktop (quiet)..."
 Start-Process -Wait -FilePath $installer -ArgumentList "install", "--quiet", "--accept-license"
 
-# Add Docker to PATH for this session
-$env:PATH = "C:\Program Files\Docker\Docker\resources\bin;$env:PATH"
+# Find where Docker was installed and add to PATH
+$dockerBin = Get-ChildItem "C:\Program Files\Docker" -Filter "docker.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($dockerBin) {
+    Write-Host "Found docker at $($dockerBin.FullName)"
+    $env:PATH = "$($dockerBin.DirectoryName);$env:PATH"
+} else {
+    # Fallback common paths
+    $env:PATH = "C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\Docker\Docker;$env:PATH"
+}
 
-Write-Host "Starting Docker Desktop..."
-& "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+# Start Docker via the service (not the GUI app)
+Write-Host "Starting Docker service..."
+$services = @("com.docker.service", "docker")
+foreach ($svc in $services) {
+    try {
+        Start-Service $svc -ErrorAction Stop
+        Write-Host "Started service: $svc"
+    } catch {
+        Write-Host "Service '$svc' not found or failed to start, trying next..."
+    }
+}
 
 Write-Host "Waiting for Docker daemon to be ready..."
 $timeout = 300
@@ -44,6 +60,9 @@ while ($true) {
     Start-Sleep -Seconds 5
     $elapsed += 5
     if ($elapsed -ge $timeout) {
+        # Show what services exist for debugging
+        Write-Host "Docker-related services:"
+        Get-Service *docker* 2>$null | Format-Table -AutoSize
         Write-Error "Docker failed to start within ${timeout}s"
         exit 1
     }

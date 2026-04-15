@@ -267,9 +267,8 @@ blocks:
             # Run share consumer tests
             - cd tests
             - $env:RDKAFKA_TEST_CONF = "test.conf"; $env:TESTS_SKIP_BEFORE = "0170"; & ..\win32\outdir\v142\x64\Release\tests.exe
-            # Cache Kafka download for next run
-            - cd ..
-            - cache store trivup-kafka-${env:KAFKA_VERSION}-${env:CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${env:KAFKA_VERSION}
+            # DEBUG: Sleep 3 hours for SSH debugging
+            - Start-Sleep -Seconds 10800
 
   - name: 'Linux x64: release artifact docker builds'
     dependencies: []
