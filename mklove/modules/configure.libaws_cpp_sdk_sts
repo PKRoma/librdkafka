@@ -32,12 +32,24 @@ function manual_checks {
     mkl_meta_set "libaws_cpp_sdk_sts" "brew" "aws-sdk-cpp"
     # All CRT sub-libraries that aws-cpp-sdk-core references must be listed
     # so they are merged into librdkafka-static.a by Makefile.base.
-    mkl_meta_set "libaws_cpp_sdk_sts" "static" \
-        "libaws-cpp-sdk-sts.a libaws-cpp-sdk-core.a libaws-crt-cpp.a \
-         libaws-c-auth.a libaws-c-cal.a libaws-c-http.a libaws-c-io.a \
-         libaws-c-mqtt.a libaws-c-common.a libaws-c-compression.a \
-         libaws-c-event-stream.a libaws-c-s3.a libaws-c-sdkutils.a \
-         libaws-checksums.a"
+    # On Linux, aws-c-io uses s2n-tls as its TLS backend; libs2n.a must be
+    # included. On macOS, aws-c-io uses Apple Security/Network frameworks
+    # instead, so libs2n.a is not built and must not be listed there.
+    if [[ $MKL_DISTRO == "osx" ]]; then
+        mkl_meta_set "libaws_cpp_sdk_sts" "static" \
+            "libaws-cpp-sdk-sts.a libaws-cpp-sdk-core.a libaws-crt-cpp.a \
+             libaws-c-auth.a libaws-c-cal.a libaws-c-http.a libaws-c-io.a \
+             libaws-c-mqtt.a libaws-c-common.a libaws-c-compression.a \
+             libaws-c-event-stream.a libaws-c-s3.a libaws-c-sdkutils.a \
+             libaws-checksums.a"
+    else
+        mkl_meta_set "libaws_cpp_sdk_sts" "static" \
+            "libaws-cpp-sdk-sts.a libaws-cpp-sdk-core.a libaws-crt-cpp.a \
+             libaws-c-auth.a libaws-c-cal.a libaws-c-http.a libaws-c-io.a \
+             libaws-c-mqtt.a libaws-c-common.a libaws-c-compression.a \
+             libaws-c-event-stream.a libaws-c-s3.a libaws-c-sdkutils.a \
+             libaws-checksums.a libs2n.a"
+    fi
 
     # On macOS, aws-c-io uses Apple Security and Network frameworks.
     # These must be in the makefile LDFLAGS before the link probe so
@@ -51,12 +63,19 @@ function manual_checks {
     # No --no-static: mklove routes the link flags into MKL_STATIC_LIBS so
     # the archives are merged into librdkafka-static.a automatically via the
     # existing ar -M / libtool -static logic in Makefile.base.
+    # On Linux, aws-c-io uses s2n-tls as its TLS backend so -ls2n is required
+    # for the link probe to resolve s2n_* symbols. On macOS, aws-c-io uses
+    # Apple Security/Network frameworks instead, so -ls2n must be omitted.
+    local _s2n_flag=""
+    if [[ $MKL_DISTRO != "osx" ]]; then
+        _s2n_flag="-ls2n"
+    fi
     mkl_lib_check "libaws_cpp_sdk_sts" "WITH_AWS_STS" $action CXX \
         "-laws-cpp-sdk-sts -laws-cpp-sdk-core -laws-crt-cpp \
          -laws-c-auth -laws-c-cal -laws-c-http -laws-c-io \
          -laws-c-mqtt -laws-c-common -laws-c-compression \
          -laws-c-event-stream -laws-c-s3 -laws-c-sdkutils \
-         -laws-checksums" \
+         -laws-checksums ${_s2n_flag}" \
         "#include <aws/sts/STSClient.h>
 #include <aws/sts/model/GetWebIdentityTokenRequest.h>
 void foo (void) { Aws::STS::STSClient c; }"
