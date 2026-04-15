@@ -41,6 +41,23 @@
 #define MAX_MSGS      500
 #define CONSUME_ARRAY 10001
 
+/** Common producer reused across all non-mock subtests. */
+static rd_kafka_t *common_producer;
+
+/** Common admin client reused across all non-mock subtests. */
+static rd_kafka_t *common_admin;
+
+/**
+ * @brief Produce messages using the common producer.
+ */
+static void produce_to_topic(const char *topic, int32_t partition, int msgcnt) {
+        rd_kafka_topic_t *rkt;
+        rkt = test_create_producer_topic(common_producer, topic, NULL);
+        test_produce_msgs(common_producer, rkt, 0, partition, 0, msgcnt, NULL,
+                          0);
+        rd_kafka_topic_destroy(rkt);
+}
+
 
 /**
  * @brief Create share consumer with specified ack mode.
@@ -52,7 +69,7 @@ static rd_kafka_share_t *create_share_consumer(const char *group_id,
         rd_kafka_conf_t *conf;
         char errstr[512];
 
-        test_conf_init(&conf, NULL, 60);
+        test_conf_init(&conf, NULL, 0);
 
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode, errstr,
@@ -67,22 +84,24 @@ static rd_kafka_share_t *create_share_consumer(const char *group_id,
 
 /**
  * @brief Set share.auto.offset.reset=earliest for a share group.
- *        Uses a new admin client (not the share consumer handle).
  */
 static void set_group_offset_earliest(const char *group_name) {
-        rd_kafka_t *admin;
-        rd_kafka_conf_t *conf;
-        char errstr[512];
         const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
 
-        test_conf_init(&conf, NULL, 30);
-        admin = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
-        TEST_ASSERT(admin, "Failed to create admin client: %s", errstr);
+        test_IncrementalAlterConfigs_simple(
+            common_admin, RD_KAFKA_RESOURCE_GROUP, group_name, cfg, 1);
+}
 
-        test_IncrementalAlterConfigs_simple(admin, RD_KAFKA_RESOURCE_GROUP,
-                                            group_name, cfg, 1);
+/**
+ * @brief Set share.record.lock.duration.ms for a share group.
+ */
+static void set_group_lock_duration(const char *group_name,
+                                    const char *duration_ms) {
+        const char *cfg[] = {"share.record.lock.duration.ms", "SET",
+                             duration_ms};
 
-        rd_kafka_destroy(admin);
+        test_IncrementalAlterConfigs_simple(
+            common_admin, RD_KAFKA_RESOURCE_GROUP, group_name, cfg, 1);
 }
 
 
@@ -126,14 +145,14 @@ static void do_test_basic_implicit_commit_sync(void) {
         size_t j;
         int consumed = 0;
         int attempts = 0;
-        int i;
 
         topic = test_mk_topic_name("0176-cs-impl-basic", 1);
-        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_easy(topic, 0, 0, 5);
+        test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
+        produce_to_topic(topic, 0, 5);
 
         rkshare = create_share_consumer(group, "implicit");
         set_group_offset_earliest(group);
+        set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
         /* Consume records */
@@ -164,21 +183,62 @@ static void do_test_basic_implicit_commit_sync(void) {
                     "Expected per-partition results, got NULL");
 
         TEST_SAY("commit_sync returned %d partition(s)\n", partitions->cnt);
-        TEST_ASSERT(partitions->cnt >= 1,
-                    "Expected at least 1 partition result, got %d",
+        TEST_ASSERT(partitions->cnt == 1,
+                    "Expected exactly 1 partition result, got %d",
                     partitions->cnt);
-
-        for (i = 0; i < partitions->cnt; i++) {
-                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
-                TEST_SAY("  %s [%" PRId32 "]: %s\n", rktpar->topic,
-                         rktpar->partition, rd_kafka_err2str(rktpar->err));
-                TEST_ASSERT(rktpar->err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "Expected NO_ERROR for %s [%" PRId32 "], got %s",
-                            rktpar->topic, rktpar->partition,
-                            rd_kafka_err2str(rktpar->err));
-        }
+        TEST_SAY("  %s [%" PRId32 "]: %s\n", partitions->elems[0].topic,
+                 partitions->elems[0].partition,
+                 rd_kafka_err2str(partitions->elems[0].err));
+        TEST_ASSERT(!strcmp(partitions->elems[0].topic, topic),
+                    "Expected topic %s, got %s", topic,
+                    partitions->elems[0].topic);
+        TEST_ASSERT(partitions->elems[0].partition == 0,
+                    "Expected partition 0, got %" PRId32,
+                    partitions->elems[0].partition);
+        TEST_ASSERT(partitions->elems[0].err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected NO_ERROR, got %s",
+                    rd_kafka_err2str(partitions->elems[0].err));
 
         rd_kafka_topic_partition_list_destroy(partitions);
+
+        /* Wait for acquisition lock to expire (3s + 1s buffer) */
+        rd_sleep(4);
+
+        /* Produce 5 verification records and consume with the same
+         * consumer — should get only these 5 (dc == 1), proving
+         * the first batch was committed and not redelivered. */
+        produce_to_topic(topic, 0, 5);
+
+        consumed = 0;
+        attempts = 0;
+        while (consumed < 5 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 5000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err) {
+                                TEST_ASSERT(
+                                    rd_kafka_message_delivery_count(
+                                        rkmessages[j]) == 1,
+                                    "Got redelivered record at offset %" PRId64
+                                    " (delivery_count=%d)",
+                                    rkmessages[j]->offset,
+                                    rd_kafka_message_delivery_count(
+                                        rkmessages[j]));
+                                consumed++;
+                        }
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+
+        TEST_SAY("Verification: got %d messages (expected 5)\n", consumed);
+        TEST_ASSERT(consumed == 5, "Expected 5 verification records, got %d",
+                    consumed);
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
@@ -203,14 +263,14 @@ static void do_test_basic_explicit_commit_sync(void) {
         size_t j;
         int consumed = 0;
         int attempts = 0;
-        int i;
 
         topic = test_mk_topic_name("0176-cs-expl-basic", 1);
-        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_easy(topic, 0, 0, 5);
+        test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
+        produce_to_topic(topic, 0, 5);
 
         rkshare = create_share_consumer(group, "explicit");
         set_group_offset_earliest(group);
+        set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
         /* Consume records and explicitly ACCEPT each */
@@ -244,21 +304,62 @@ static void do_test_basic_explicit_commit_sync(void) {
                     "Expected per-partition results, got NULL");
 
         TEST_SAY("commit_sync returned %d partition(s)\n", partitions->cnt);
-        TEST_ASSERT(partitions->cnt >= 1,
-                    "Expected at least 1 partition result, got %d",
+        TEST_ASSERT(partitions->cnt == 1,
+                    "Expected exactly 1 partition result, got %d",
                     partitions->cnt);
-
-        for (i = 0; i < partitions->cnt; i++) {
-                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
-                TEST_SAY("  %s [%" PRId32 "]: %s\n", rktpar->topic,
-                         rktpar->partition, rd_kafka_err2str(rktpar->err));
-                TEST_ASSERT(rktpar->err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "Expected NO_ERROR for %s [%" PRId32 "], got %s",
-                            rktpar->topic, rktpar->partition,
-                            rd_kafka_err2str(rktpar->err));
-        }
+        TEST_SAY("  %s [%" PRId32 "]: %s\n", partitions->elems[0].topic,
+                 partitions->elems[0].partition,
+                 rd_kafka_err2str(partitions->elems[0].err));
+        TEST_ASSERT(!strcmp(partitions->elems[0].topic, topic),
+                    "Expected topic %s, got %s", topic,
+                    partitions->elems[0].topic);
+        TEST_ASSERT(partitions->elems[0].partition == 0,
+                    "Expected partition 0, got %" PRId32,
+                    partitions->elems[0].partition);
+        TEST_ASSERT(partitions->elems[0].err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected NO_ERROR, got %s",
+                    rd_kafka_err2str(partitions->elems[0].err));
 
         rd_kafka_topic_partition_list_destroy(partitions);
+
+        /* Wait for acquisition lock to expire (3s + 1s buffer) */
+        rd_sleep(4);
+
+        /* Produce 5 verification records and consume with the same
+         * consumer — should get only these 5 (dc == 1), proving
+         * the first batch was committed and not redelivered. */
+        produce_to_topic(topic, 0, 5);
+
+        consumed = 0;
+        attempts = 0;
+        while (consumed < 5 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 5000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err) {
+                                TEST_ASSERT(
+                                    rd_kafka_message_delivery_count(
+                                        rkmessages[j]) == 1,
+                                    "Got redelivered record at offset %" PRId64
+                                    " (delivery_count=%d)",
+                                    rkmessages[j]->offset,
+                                    rd_kafka_message_delivery_count(
+                                        rkmessages[j]));
+                                consumed++;
+                        }
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+
+        TEST_SAY("Verification: got %d messages (expected 5)\n", consumed);
+        TEST_ASSERT(consumed == 5, "Expected 5 verification records, got %d",
+                    consumed);
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
@@ -279,7 +380,7 @@ static void do_test_no_pending_acks(void) {
         rd_kafka_topic_partition_list_t *partitions = NULL;
 
         topic = test_mk_topic_name("0176-cs-no-pending", 1);
-        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
 
         rkshare = create_share_consumer(group, "explicit");
         set_group_offset_earliest(group);
@@ -322,8 +423,8 @@ static void do_test_commit_sync_prevents_redelivery(void) {
         int attempts = 0;
 
         topic = test_mk_topic_name("0176-cs-no-redeliver", 1);
-        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_easy(topic, 0, 0, 5);
+        test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
+        produce_to_topic(topic, 0, 5);
 
         /* Consumer A: consume all and commit_sync */
         rkshare = create_share_consumer(group, "implicit");
@@ -357,31 +458,38 @@ static void do_test_commit_sync_prevents_redelivery(void) {
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
 
-        /* Consumer B: same group, should get 0 records */
+        /* Produce 5 verification records */
+        produce_to_topic(topic, 0, 5);
+
+        /* Consumer B: should only get the 5 verification records.
+         * Close tears down the connection and broker releases
+         * records immediately — no lock wait needed. */
         rkshare = create_share_consumer(group, "implicit");
         subscribe_consumer(rkshare, &topic, 1);
 
-        consumed = 0;
-        attempts = 0;
-        while (attempts++ < 5) {
-                rcvd  = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &rcvd);
-                if (error) {
-                        rd_kafka_error_destroy(error);
-                        continue;
-                }
+        rcvd  = 0;
+        error = rd_kafka_share_consume_batch(rkshare, 15000, rkmessages, &rcvd);
+        TEST_SAY("Consumer B consume_batch returned: rcvd=%zu, error=%s\n",
+                 rcvd, error ? rd_kafka_error_string(error) : "none");
+        if (error)
+                rd_kafka_error_destroy(error);
 
-                for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err)
-                                consumed++;
-                        rd_kafka_message_destroy(rkmessages[j]);
+        consumed = 0;
+        for (j = 0; j < rcvd; j++) {
+                if (!rkmessages[j]->err) {
+                        TEST_ASSERT(
+                            rd_kafka_message_delivery_count(rkmessages[j]) == 1,
+                            "Consumer B got redelivered record at "
+                            "offset %" PRId64 " (delivery_count=%d)",
+                            rkmessages[j]->offset,
+                            rd_kafka_message_delivery_count(rkmessages[j]));
+                        consumed++;
                 }
+                rd_kafka_message_destroy(rkmessages[j]);
         }
 
-        TEST_SAY("Consumer B consumed %d messages (expected 0)\n", consumed);
-        TEST_ASSERT(consumed == 0,
-                    "Consumer B got %d records, expected 0 after commit_sync",
+        TEST_SAY("Consumer B got %d messages (expected 5)\n", consumed);
+        TEST_ASSERT(consumed == 5, "Expected 5 verification records, got %d",
                     consumed);
 
         rd_kafka_share_consumer_close(rkshare);
@@ -407,13 +515,12 @@ static void do_test_mixed_ack_types(void) {
         size_t j;
         int consumed = 0;
         int attempts = 0;
-        int i;
         int64_t released_offsets[3];
         int released_cnt = 0;
 
         topic = test_mk_topic_name("0176-cs-mixed-acks", 1);
-        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_easy(topic, 0, 0, 10);
+        test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
+        produce_to_topic(topic, 0, 10);
 
         /* Consumer A: consume all 10 in a single batch, apply mixed ack
          * types */
@@ -484,16 +591,21 @@ static void do_test_mixed_ack_types(void) {
                     error ? rd_kafka_error_string(error) : "");
         TEST_ASSERT(partitions != NULL,
                     "Expected per-partition results, got NULL");
-
-        for (i = 0; i < partitions->cnt; i++) {
-                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
-                TEST_SAY("  %s [%" PRId32 "]: %s\n", rktpar->topic,
-                         rktpar->partition, rd_kafka_err2str(rktpar->err));
-                TEST_ASSERT(rktpar->err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "Expected NO_ERROR for %s [%" PRId32 "], got %s",
-                            rktpar->topic, rktpar->partition,
-                            rd_kafka_err2str(rktpar->err));
-        }
+        TEST_ASSERT(partitions->cnt == 1,
+                    "Expected exactly 1 partition result, got %d",
+                    partitions->cnt);
+        TEST_SAY("  %s [%" PRId32 "]: %s\n", partitions->elems[0].topic,
+                 partitions->elems[0].partition,
+                 rd_kafka_err2str(partitions->elems[0].err));
+        TEST_ASSERT(!strcmp(partitions->elems[0].topic, topic),
+                    "Expected topic %s, got %s", topic,
+                    partitions->elems[0].topic);
+        TEST_ASSERT(partitions->elems[0].partition == 0,
+                    "Expected partition 0, got %" PRId32,
+                    partitions->elems[0].partition);
+        TEST_ASSERT(partitions->elems[0].err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected NO_ERROR, got %s",
+                    rd_kafka_err2str(partitions->elems[0].err));
 
         rd_kafka_topic_partition_list_destroy(partitions);
 
@@ -506,7 +618,7 @@ static void do_test_mixed_ack_types(void) {
 
         consumed = 0;
         attempts = 0;
-        while (attempts++ < 10) {
+        while (consumed < 3 && attempts++ < 10) {
                 rcvd  = 0;
                 error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
                                                      &rcvd);
@@ -581,11 +693,10 @@ static void do_test_multiple_commit_sync_calls(void) {
         int attempts                = 0;
         int commit_cnt              = 0;
         int acked_since_last_commit = 0;
-        int i;
 
         topic = test_mk_topic_name("0176-cs-multi-calls", 1);
-        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_easy(topic, 0, 0, 50);
+        test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
+        produce_to_topic(topic, 0, 50);
 
         rkshare = create_share_consumer(group, "explicit");
         set_group_offset_earliest(group);
@@ -625,19 +736,28 @@ static void do_test_multiple_commit_sync_calls(void) {
                                     "commit_sync #%d: expected results, "
                                     "got NULL",
                                     commit_cnt);
-
-                                for (i = 0; i < partitions->cnt; i++) {
-                                        rd_kafka_topic_partition_t *rktpar =
-                                            &partitions->elems[i];
-                                        TEST_ASSERT(
-                                            rktpar->err ==
-                                                RD_KAFKA_RESP_ERR_NO_ERROR,
-                                            "commit_sync #%d: %s [%" PRId32
-                                            "] got %s",
-                                            commit_cnt, rktpar->topic,
-                                            rktpar->partition,
-                                            rd_kafka_err2str(rktpar->err));
-                                }
+                                TEST_ASSERT(partitions->cnt == 1,
+                                            "commit_sync #%d: expected 1 "
+                                            "partition, got %d",
+                                            commit_cnt, partitions->cnt);
+                                TEST_ASSERT(
+                                    !strcmp(partitions->elems[0].topic, topic),
+                                    "commit_sync #%d: expected topic "
+                                    "%s, got %s",
+                                    commit_cnt, topic,
+                                    partitions->elems[0].topic);
+                                TEST_ASSERT(partitions->elems[0].partition == 0,
+                                            "commit_sync #%d: expected "
+                                            "partition 0, got %" PRId32,
+                                            commit_cnt,
+                                            partitions->elems[0].partition);
+                                TEST_ASSERT(
+                                    partitions->elems[0].err ==
+                                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                                    "commit_sync #%d: %s [%" PRId32 "] got %s",
+                                    commit_cnt, partitions->elems[0].topic,
+                                    partitions->elems[0].partition,
+                                    rd_kafka_err2str(partitions->elems[0].err));
 
                                 rd_kafka_topic_partition_list_destroy(
                                     partitions);
@@ -682,32 +802,36 @@ static void do_test_multiple_commit_sync_calls(void) {
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
 
-        /* Consumer B: same group, should get 0 records */
+        /* Produce 5 verification records */
+        produce_to_topic(topic, 0, 5);
+
+        /* Consumer B: should only get the 5 verification records */
         rkshare = create_share_consumer(group, "implicit");
         subscribe_consumer(rkshare, &topic, 1);
 
-        consumed = 0;
-        attempts = 0;
-        while (attempts++ < 5) {
-                rcvd  = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &rcvd);
-                if (error) {
-                        rd_kafka_error_destroy(error);
-                        continue;
-                }
+        rcvd  = 0;
+        error = rd_kafka_share_consume_batch(rkshare, 15000, rkmessages, &rcvd);
+        TEST_SAY("Consumer B consume_batch returned: rcvd=%zu, error=%s\n",
+                 rcvd, error ? rd_kafka_error_string(error) : "none");
+        if (error)
+                rd_kafka_error_destroy(error);
 
-                for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err)
-                                consumed++;
-                        rd_kafka_message_destroy(rkmessages[j]);
+        consumed = 0;
+        for (j = 0; j < rcvd; j++) {
+                if (!rkmessages[j]->err) {
+                        TEST_ASSERT(
+                            rd_kafka_message_delivery_count(rkmessages[j]) == 1,
+                            "Consumer B got redelivered record at "
+                            "offset %" PRId64 " (delivery_count=%d)",
+                            rkmessages[j]->offset,
+                            rd_kafka_message_delivery_count(rkmessages[j]));
+                        consumed++;
                 }
+                rd_kafka_message_destroy(rkmessages[j]);
         }
 
-        TEST_SAY("Consumer B consumed %d messages (expected 0)\n", consumed);
-        TEST_ASSERT(consumed == 0,
-                    "Consumer B got %d records, expected 0 after 5 "
-                    "commit_sync calls",
+        TEST_SAY("Consumer B got %d messages (expected 5)\n", consumed);
+        TEST_ASSERT(consumed == 5, "Expected 5 verification records, got %d",
                     consumed);
 
         rd_kafka_share_consumer_close(rkshare);
@@ -765,11 +889,12 @@ static void do_test_multi_topic_partition(void) {
         /* Create topics and produce 10 messages per partition */
         for (i = 0; i < MULTI_TP_TOPICS; i++) {
                 topics[i] = rd_strdup(test_mk_topic_name("0176-cs-mtp", 1));
-                test_create_topic_wait_exists(
-                    NULL, topics[i], MULTI_TP_PARTITIONS, -1, 60 * 1000);
+                test_create_topic_wait_exists(common_admin, topics[i],
+                                              MULTI_TP_PARTITIONS, -1,
+                                              60 * 1000);
                 for (p = 0; p < MULTI_TP_PARTITIONS; p++)
-                        test_produce_msgs_easy(topics[i], p, p,
-                                               MULTI_TP_MSGS_PER_PARTITION);
+                        produce_to_topic(topics[i], p,
+                                         MULTI_TP_MSGS_PER_PARTITION);
         }
 
         rkshare = create_share_consumer(group, "explicit");
@@ -779,6 +904,7 @@ static void do_test_multi_topic_partition(void) {
         /* Consume until all records are settled
          * (accepted + rejected == total_msgs) */
         while (accepted + rejected < total_msgs && attempts++ < 200) {
+                rd_kafka_topic_partition_list_t *batch_tps;
                 int batch_cnt = 0;
 
                 rcvd  = 0;
@@ -789,15 +915,29 @@ static void do_test_multi_topic_partition(void) {
                         continue;
                 }
 
+                /* Track unique topic-partitions in this batch */
+                batch_tps = rd_kafka_topic_partition_list_new(
+                    MULTI_TP_TOPICS * MULTI_TP_PARTITIONS);
+
                 for (j = 0; j < rcvd; j++) {
                         rd_kafka_share_AcknowledgeType_t ack_type;
                         rd_kafka_resp_err_t err;
                         int16_t dc;
+                        const char *msg_topic;
 
                         if (rkmessages[j]->err) {
                                 rd_kafka_message_destroy(rkmessages[j]);
                                 continue;
                         }
+
+                        msg_topic = rd_kafka_topic_name(rkmessages[j]->rkt);
+
+                        /* Add to batch TPs if not already present */
+                        if (!rd_kafka_topic_partition_list_find(
+                                batch_tps, msg_topic, rkmessages[j]->partition))
+                                rd_kafka_topic_partition_list_add(
+                                    batch_tps, msg_topic,
+                                    rkmessages[j]->partition);
 
                         dc = rd_kafka_message_delivery_count(rkmessages[j]);
                         if (dc > max_dc_seen)
@@ -828,8 +968,10 @@ static void do_test_multi_topic_partition(void) {
                         rd_kafka_message_destroy(rkmessages[j]);
                 }
 
-                if (batch_cnt == 0)
+                if (batch_cnt == 0) {
+                        rd_kafka_topic_partition_list_destroy(batch_tps);
                         continue;
+                }
 
                 /* commit_sync after each batch */
                 partitions = NULL;
@@ -841,6 +983,12 @@ static void do_test_multi_topic_partition(void) {
                             "commit_sync #%d: expected results, got NULL",
                             commit_cnt);
 
+                /* Verify commit_sync returned exactly the TPs we
+                 * consumed from in this batch */
+                TEST_ASSERT(partitions->cnt == batch_tps->cnt,
+                            "commit_sync #%d: expected %d partition(s), got %d",
+                            commit_cnt, batch_tps->cnt, partitions->cnt);
+
                 for (i = 0; i < partitions->cnt; i++) {
                         rd_kafka_topic_partition_t *rktpar =
                             &partitions->elems[i];
@@ -849,6 +997,13 @@ static void do_test_multi_topic_partition(void) {
                                     commit_cnt, rktpar->topic,
                                     rktpar->partition,
                                     rd_kafka_err2str(rktpar->err));
+                        TEST_ASSERT(rd_kafka_topic_partition_list_find(
+                                        batch_tps, rktpar->topic,
+                                        rktpar->partition) != NULL,
+                                    "commit_sync #%d: unexpected partition "
+                                    "%s [%" PRId32 "] in results",
+                                    commit_cnt, rktpar->topic,
+                                    rktpar->partition);
                 }
 
                 TEST_SAY(
@@ -858,6 +1013,7 @@ static void do_test_multi_topic_partition(void) {
                     total_msgs, partitions->cnt);
 
                 rd_kafka_topic_partition_list_destroy(partitions);
+                rd_kafka_topic_partition_list_destroy(batch_tps);
         }
 
         TEST_SAY(
@@ -1381,8 +1537,8 @@ static void do_test_mixed_commit_types(void) {
         rd_ts_t max_sync_elapsed_ms = 0;
 
         topic = test_mk_topic_name("0176-cs-mixed-types", 1);
-        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_easy(topic, 0, 0, 50);
+        test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
+        produce_to_topic(topic, 0, 50);
 
         rkshare = create_share_consumer(group, "explicit");
         set_group_offset_earliest(group);
@@ -1514,32 +1670,36 @@ static void do_test_mixed_commit_types(void) {
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
 
-        /* Second consumer: should get 0 records */
+        /* Produce 5 verification records */
+        produce_to_topic(topic, 0, 5);
+
+        /* Second consumer: should only get the 5 verification records */
         rkshare = create_share_consumer(group, "implicit");
         subscribe_consumer(rkshare, &topic, 1);
 
-        consumed = 0;
-        attempts = 0;
-        while (attempts++ < 5) {
-                rcvd  = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &rcvd);
-                if (error) {
-                        rd_kafka_error_destroy(error);
-                        continue;
-                }
+        rcvd  = 0;
+        error = rd_kafka_share_consume_batch(rkshare, 15000, rkmessages, &rcvd);
+        TEST_SAY("Consumer B consume_batch returned: rcvd=%zu, error=%s\n",
+                 rcvd, error ? rd_kafka_error_string(error) : "none");
+        if (error)
+                rd_kafka_error_destroy(error);
 
-                for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err)
-                                consumed++;
-                        rd_kafka_message_destroy(rkmessages[j]);
+        consumed = 0;
+        for (j = 0; j < rcvd; j++) {
+                if (!rkmessages[j]->err) {
+                        TEST_ASSERT(
+                            rd_kafka_message_delivery_count(rkmessages[j]) == 1,
+                            "Consumer B got redelivered record at "
+                            "offset %" PRId64 " (delivery_count=%d)",
+                            rkmessages[j]->offset,
+                            rd_kafka_message_delivery_count(rkmessages[j]));
+                        consumed++;
                 }
+                rd_kafka_message_destroy(rkmessages[j]);
         }
 
-        TEST_SAY("Second consumer got %d records (expected 0)\n", consumed);
-        TEST_ASSERT(consumed == 0,
-                    "Second consumer got %d records, expected 0 after "
-                    "mixed async+sync commits",
+        TEST_SAY("Consumer B got %d messages (expected 5)\n", consumed);
+        TEST_ASSERT(consumed == 5, "Expected 5 verification records, got %d",
                     consumed);
 
         rd_kafka_share_consumer_close(rkshare);
@@ -1775,6 +1935,10 @@ static void do_test_mock_broker_dispatch_priority(void) {
 
 
 int main_0176_share_consumer_commit_sync(int argc, char **argv) {
+        test_timeout_set(120);
+        common_producer = test_create_producer();
+        common_admin    = test_create_producer();
+
         /* Real broker tests */
         do_test_basic_implicit_commit_sync();
         do_test_basic_explicit_commit_sync();
@@ -1784,6 +1948,9 @@ int main_0176_share_consumer_commit_sync(int argc, char **argv) {
         do_test_multiple_commit_sync_calls();
         do_test_multi_topic_partition();
         do_test_mixed_commit_types();
+
+        rd_kafka_destroy(common_admin);
+        rd_kafka_destroy(common_producer);
 
         return 0;
 }

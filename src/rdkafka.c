@@ -3937,7 +3937,9 @@ static void rd_kafka_share_commit_sync_timeout_cb(rd_kafka_timers_t *rkts,
         }
         rd_kafka_rdunlock(rk);
 
-        /* Fill partitions still IN_PROGRESS with REQUEST_TIMED_OUT */
+        /* TODO: Verify that __TIMED_OUT (local timeout) is the correct
+         *  error here rather than REQUEST_TIMED_OUT (broker error). */
+        /* Fill partitions still IN_PROGRESS with __TIMED_OUT */
         results = rkcg->rkcg_commit_sync_request.results;
         for (i = 0; i < results->cnt; i++) {
                 rd_kafka_topic_partition_t *rktpar = &results->elems[i];
