@@ -159,14 +159,5 @@ function install_source {
 
     mkl_popd
 
-    # Strip debug info (-S) and local symbol table entries (-x) from all
-    # 14 AWS static archives.  This removes hundreds of internal C++ mangled
-    # names (std::, Aws:: internals, anonymous-namespace symbols) that are
-    # never part of the public API and would otherwise bloat librdkafka-static.a.
-    # The object code itself is untouched — only symbol table entries are removed.
-    # Makefile.base already runs strip -S on the final merged librdkafka-static.a,
-    # but only -S (debug info); -x (local symbols) is what gives the extra saving.
-    find "${destdir}/usr/lib" -name "libaws*.a" | xargs strip -Sx
-
     return 0
 }
