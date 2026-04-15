@@ -238,17 +238,18 @@ blocks:
           value: 'yes'
       prologue:
         commands:
+          # Setup Docker for Linux containers
+          - "& .\\win32\\setup-docker.ps1"
           # Setup vcpkg
           - cd ..
           - "& .\\librdkafka\\win32\\setup-vcpkg.ps1"
           - cd librdkafka
           # Build librdkafka only (no local tests)
-          - $msbuild = (& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe)
-          - "& $msbuild win32\\librdkafka.sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v142"
+          - $msbuild = (& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe); & $msbuild win32\librdkafka.sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v142
       epilogue:
         commands:
-          - docker stop kafka-share-test 2>$null
-          - docker rm kafka-share-test 2>$null
+          - try { docker stop kafka-share-test } catch {}
+          - try { docker rm kafka-share-test } catch {}
       jobs:
         - name: 'Build and run share consumer tests'
           commands:
