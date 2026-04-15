@@ -38,7 +38,6 @@
  * and returns per-partition results.
  */
 
-#define MAX_MSGS      500
 #define CONSUME_ARRAY 10001
 
 /** Common producer reused across all non-mock subtests. */
