@@ -233,41 +233,9 @@ blocks:
       agent:
         machine:
           type: s1-prod-windows
-      env_vars:
-        - name: VCPKG_DISABLE_METRICS
-          value: 'yes'
-      prologue:
-        commands:
-          # Setup Docker for Linux containers
-          - "& .\\win32\\setup-docker.ps1"
-          # Setup vcpkg
-          - cd ..
-          - "& .\\librdkafka\\win32\\setup-vcpkg.ps1"
-          - cd librdkafka
-          # Build librdkafka only (no local tests)
-          - $msbuild = (& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe); & $msbuild win32\librdkafka.sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v142
-      epilogue:
-        commands:
-          - try { docker stop kafka-share-test } catch {}
-          - try { docker rm kafka-share-test } catch {}
       jobs:
-        - name: 'Build and run share consumer tests'
+        - name: 'Debug: SSH into Windows machine'
           commands:
-            # Build Docker image (reuse existing Dockerfile)
-            - docker build -f packaging/tools/Dockerfile -t kafka-test --build-arg UID=1000 .
-            # Clean up from any previous run
-            - if (Test-Path tests/test.conf) { Remove-Item tests/test.conf }
-            - if (Test-Path tests/.kafka-ready) { Remove-Item tests/.kafka-ready }
-            # Restore cached Kafka download
-            - cache restore trivup-kafka-${env:KAFKA_VERSION}-${env:CACHE_TAG}
-            # Start Kafka in Docker with fixed port
-            - docker run -d --name kafka-share-test -p 19092-19110:19092-19110 -v "${PWD}:/librdkafka" -w /librdkafka/tests -e CI=true kafka-test /home/user/venv/bin/python3 /librdkafka/packaging/tools/start-kafka-docker.py --version $env:KAFKA_VERSION --cpversion $env:CP_VERSION --conf '["group.share.min.record.lock.duration.ms=1000", "transaction.state.log.replication.factor=1", "transaction.state.log.min.isr=1"]'
-            # Wait for Kafka to be ready
-            - $t=0; while (-not (Test-Path tests/.kafka-ready)) { Start-Sleep 3; $t+=3; if($t -ge 300){docker logs kafka-share-test; throw "Timeout waiting for Kafka"} }
-            # Run share consumer tests
-            - cd tests
-            - $env:RDKAFKA_TEST_CONF = "test.conf"; $env:TESTS_SKIP_BEFORE = "0170"; & ..\win32\outdir\v142\x64\Release\tests.exe
-            # DEBUG: Sleep 3 hours for SSH debugging
             - Start-Sleep -Seconds 10800
 
   - name: 'Linux x64: release artifact docker builds'
