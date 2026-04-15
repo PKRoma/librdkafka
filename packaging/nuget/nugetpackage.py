@@ -12,6 +12,7 @@ from packaging import Package, Mapping
 
 SEMVER_PREFIX = re.compile(r"^\d+.\d+.\d+")
 
+
 class NugetPackage (Package):
     """ All platforms, archs, et.al, are bundled into one set of
         NuGet output packages: "main", redist and symbols """
@@ -166,6 +167,16 @@ class NugetPackage (Package):
                 'librdkafka.redist*',
                 'build/native/bin/v142/x64/Release/libcurl.dll',
                 'runtimes/win-x64/native/libcurl.dll'),
+        Mapping({'arch': 'x64',
+                 'plat': 'win'},
+                'librdkafka.redist*',
+                'build/native/bin/v142/x64/Release/aws-cpp-sdk-sts.dll',
+                'runtimes/win-x64/native/aws-cpp-sdk-sts.dll'),
+        Mapping({'arch': 'x64',
+                 'plat': 'win'},
+                'librdkafka.redist*',
+                'build/native/bin/v142/x64/Release/aws-cpp-sdk-core.dll',
+                'runtimes/win-x64/native/aws-cpp-sdk-core.dll'),
         # matches x64 librdkafka.redist.zip, lib files
         Mapping({'arch': 'x64',
                  'plat': 'win'},
@@ -227,6 +238,16 @@ class NugetPackage (Package):
                 'librdkafka.redist*',
                 'build/native/bin/v142/Win32/Release/libcurl.dll',
                 'runtimes/win-x86/native/libcurl.dll'),
+        Mapping({'arch': 'x86',
+                 'plat': 'win'},
+                'librdkafka.redist*',
+                'build/native/bin/v142/Win32/Release/aws-cpp-sdk-sts.dll',
+                'runtimes/win-x86/native/aws-cpp-sdk-sts.dll'),
+        Mapping({'arch': 'x86',
+                 'plat': 'win'},
+                'librdkafka.redist*',
+                'build/native/bin/v142/Win32/Release/aws-cpp-sdk-core.dll',
+                'runtimes/win-x86/native/aws-cpp-sdk-core.dll'),
 
         # matches Win32 librdkafka.redist.zip, lib files
         Mapping({'arch': 'x86',
