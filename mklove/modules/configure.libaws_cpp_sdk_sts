@@ -41,8 +41,10 @@ function manual_checks {
     # mkl_lib_check, so this ordering is what the link probe actually uses.
     # Dependency graph (abridged):
     #   sts → core → crt-cpp → s3 → auth → http → event-stream
-    #       → io → cal → mqtt → compression → sdkutils → common
-    #       → checksums [→ s2n (Linux only)]
+    #       → io → cal → mqtt → compression → sdkutils → checksums → common
+    #       → [s2n (Linux only)]
+    # Note: libaws-checksums.a references aws_cpu_has_feature() from
+    # libaws-c-common.a (observed on aarch64), so checksums must precede common.
     # On Linux, aws-c-io uses s2n-tls as its TLS backend; libs2n.a must be
     # included last (leaf). On macOS, aws-c-io uses Apple Security/Network
     # frameworks instead, so libs2n.a is not built and must not be listed.
@@ -51,13 +53,13 @@ function manual_checks {
             "libaws-cpp-sdk-sts.a libaws-cpp-sdk-core.a libaws-crt-cpp.a \
              libaws-c-s3.a libaws-c-auth.a libaws-c-http.a libaws-c-event-stream.a \
              libaws-c-io.a libaws-c-cal.a libaws-c-mqtt.a libaws-c-compression.a \
-             libaws-c-sdkutils.a libaws-c-common.a libaws-checksums.a"
+             libaws-c-sdkutils.a libaws-checksums.a libaws-c-common.a"
     else
         mkl_meta_set "libaws_cpp_sdk_sts" "static" \
             "libaws-cpp-sdk-sts.a libaws-cpp-sdk-core.a libaws-crt-cpp.a \
              libaws-c-s3.a libaws-c-auth.a libaws-c-http.a libaws-c-event-stream.a \
              libaws-c-io.a libaws-c-cal.a libaws-c-mqtt.a libaws-c-compression.a \
-             libaws-c-sdkutils.a libaws-c-common.a libaws-checksums.a libs2n.a"
+             libaws-c-sdkutils.a libaws-checksums.a libaws-c-common.a libs2n.a"
     fi
 
     # On macOS, aws-c-io uses Apple Security and Network frameworks.
@@ -82,13 +84,15 @@ function manual_checks {
     # Archive order matters for GNU ld: dependents must precede their
     # dependencies.  Dependency graph (abridged):
     #   sts → core → crt-cpp → s3 → auth → http → event-stream
-    #       → io → cal → mqtt → compression → sdkutils → common
-    #       → checksums [→ s2n (Linux only)]
+    #       → io → cal → mqtt → compression → sdkutils → checksums → common
+    #       → [s2n (Linux only)]
+    # Note: checksums precedes common because libaws-checksums.a references
+    # aws_cpu_has_feature() from libaws-c-common.a (observed on aarch64).
     mkl_lib_check "libaws_cpp_sdk_sts" "WITH_AWS_STS" $action CXX \
         "-laws-cpp-sdk-sts -laws-cpp-sdk-core -laws-crt-cpp \
          -laws-c-s3 -laws-c-auth -laws-c-http -laws-c-event-stream \
          -laws-c-io -laws-c-cal -laws-c-mqtt -laws-c-compression \
-         -laws-c-sdkutils -laws-c-common -laws-checksums ${_s2n_flag}" \
+         -laws-c-sdkutils -laws-checksums -laws-c-common ${_s2n_flag}" \
         "#include <aws/sts/STSClient.h>
 #include <aws/sts/model/GetWebIdentityTokenRequest.h>
 void foo (void) { Aws::STS::STSClient c; }"
