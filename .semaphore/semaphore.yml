@@ -42,6 +42,7 @@ blocks:
           type: s1-macos-15-arm64-8
       prologue:
         commands:
+        - brew install cmake
         - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-IAM}"'
         - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
       env_vars:
@@ -77,6 +78,7 @@ blocks:
           value: p-librdkafka__plat-osx__arch-x64__lnk-all
       prologue:
         commands:
+        - brew install cmake
         - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-IAM}"'
         - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
       epilogue:
