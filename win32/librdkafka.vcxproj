@@ -216,10 +216,10 @@
     <ClCompile Include="..\src\rdkafka_sasl_oauthbearer_oidc.c" />
     <ClCompile Include="..\src\rdkafka_aws_sts.c" />
     <ClCompile Include="..\src\rdkafka_aws_sts_impl.cpp">
-      <!-- AWS SDK DLLs are built with /MD; match that to avoid CRT symbol
-           mismatch (LNK2019 on __imp_ std::ostream symbols). -->
-      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreadedDLL</RuntimeLibrary>
-      <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebugDLL</RuntimeLibrary>
+      <!-- Undefine USE_IMPORT_EXPORT to prevent AWS SDK headers from
+           decorating symbols with __declspec(dllimport), which would
+           generate __imp_ CRT references incompatible with /MT. -->
+      <AdditionalOptions>/UUSE_IMPORT_EXPORT %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="..\src\rdkafka_subscription.c" />
     <ClCompile Include="..\src\rdkafka_assignment.c" />
