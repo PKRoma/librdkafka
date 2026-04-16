@@ -81,11 +81,12 @@ static const char *commit_mode_str(commit_mode_t mode) {
 /**
  * @brief Set share.auto.offset.reset=earliest for a share group.
  */
-static void set_group_offset_earliest(rd_kafka_share_t* rkshare, const char *group_name) {
-    const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
+static void set_group_offset_earliest(rd_kafka_share_t *rkshare,
+                                      const char *group_name) {
+        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
 
-    test_IncrementalAlterConfigs_simple(
-        rkshare->rkshare_rk, RD_KAFKA_RESOURCE_GROUP, group_name, cfg, 1);
+        test_IncrementalAlterConfigs_simple(
+            rkshare->rkshare_rk, RD_KAFKA_RESOURCE_GROUP, group_name, cfg, 1);
 }
 
 /**
