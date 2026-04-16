@@ -233,45 +233,10 @@ blocks:
       agent:
         machine:
           type: s1-windows-2025-amd64-4
-      env_vars:
-        - name: VCPKG_DISABLE_METRICS
-          value: 'yes'
-        - name: triplet
-          value: x64-windows
-      prologue:
-        commands:
-          # Setup vcpkg and build librdkafka (build only, no local tests)
-          - cd ..
-          - "& .\\librdkafka\\win32\\setup-vcpkg.ps1"
-          - cd librdkafka
-          - $msbuild = (& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe); & $msbuild win32\librdkafka.sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v142; if ($LASTEXITCODE -ne 0) { throw "Build failed" }
-          # Setup WSL2 with Ubuntu for running Kafka (avoids Windows NTFS file locking issues)
-          - wsl --install --no-distribution
-          - wsl --install --distribution Ubuntu-24.04 --no-launch
-          - wsl --set-default Ubuntu-24.04
-          # Install Java inside WSL
-          - wsl bash -c "sudo apt-get update && sudo apt-get install -y openjdk-21-jdk-headless"
-      epilogue:
-        always:
-          commands:
-            - try { wsl bash -c "pkill -f kafka" } catch {}
-            - try { wsl --shutdown } catch {}
-            # DEBUG: Sleep 3 hours for SSH debugging
-            - Start-Sleep -Seconds 10800
       jobs:
-        - name: 'Build and run share consumer tests'
+        - name: 'Debug: SSH into Windows Server 2025'
           commands:
-            # Download and extract Kafka inside WSL
-            - wsl bash -c "curl -sL https://archive.apache.org/dist/kafka/$env:KAFKA_VERSION/kafka_2.13-$env:KAFKA_VERSION.tgz | tar xzf - -C /opt"
-            # Add share consumer config
-            - wsl bash -c "echo 'group.share.min.record.lock.duration.ms=1000' >> /opt/kafka_2.13-$env:KAFKA_VERSION/config/server.properties && echo 'transaction.state.log.replication.factor=1' >> /opt/kafka_2.13-$env:KAFKA_VERSION/config/server.properties && echo 'transaction.state.log.min.isr=1' >> /opt/kafka_2.13-$env:KAFKA_VERSION/config/server.properties"
-            # Format storage and start broker in WSL (runs on ext4, no NTFS issues)
-            - wsl bash -c "KAFKA_CLUSTER_ID=$(/opt/kafka_2.13-$env:KAFKA_VERSION/bin/kafka-storage.sh random-uuid) && /opt/kafka_2.13-$env:KAFKA_VERSION/bin/kafka-storage.sh format --standalone -t \$KAFKA_CLUSTER_ID -c /opt/kafka_2.13-$env:KAFKA_VERSION/config/server.properties && nohup /opt/kafka_2.13-$env:KAFKA_VERSION/bin/kafka-server-start.sh /opt/kafka_2.13-$env:KAFKA_VERSION/config/server.properties > /tmp/kafka.log 2>&1 &"
-            - Start-Sleep 15
-            # Write test config and run share consumer tests on Windows
-            - cd tests
-            - Set-Content test.conf "bootstrap.servers=localhost:9092`nbroker.address.family=v4"
-            - Remove-Item Env:TESTS -ErrorAction SilentlyContinue; Remove-Item Env:TESTS_SKIP -ErrorAction SilentlyContinue; $env:RDKAFKA_TEST_CONF = "test.conf"; $env:TESTS_SKIP_BEFORE = "0170"; & ..\win32\outdir\v142\x64\Release\tests.exe
+            - Start-Sleep -Seconds 10800
 
   - name: 'Linux x64: release artifact docker builds'
     dependencies: []
