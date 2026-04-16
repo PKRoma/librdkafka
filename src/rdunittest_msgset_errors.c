@@ -1451,8 +1451,7 @@ static int unittest_msgset_all_error_types_with_valid(void) {
         /* Verify no extra ops */
         {
                 rd_kafka_op_t *rko = rd_kafka_q_pop(response_q, 100, 0);
-                RD_UT_ASSERT(rko == NULL, "Unexpected extra op of type %d",
-                             rko ? rko->rko_type : -1);
+                RD_UT_ASSERT(rko == NULL, "Unexpected extra op");
         }
 
         RD_UT_SAY(
