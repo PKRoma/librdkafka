@@ -729,11 +729,11 @@ void rd_kafka_share_consumer_err_range(
         for (offset = start_offset; offset <= end_offset; offset++) {
                 rd_kafka_op_t *rko;
 
-                rko                   = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
-                rko->rko_version      = version;
-                rko->rko_err          = err;
-                rko->rko_u.err.offset = offset;
-                rko->rko_u.err.errstr = rd_strdup(errstr);
+                rko              = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
+                rko->rko_version = version;
+                rko->rko_err     = err;
+                rko->rko_u.err.offset            = offset;
+                rko->rko_u.err.errstr            = rd_strdup(errstr);
                 rko->rko_u.err.rkm.rkm_broker_id = broker_id;
 
                 /* Set acknowledgement type for share consumer */

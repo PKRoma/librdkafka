@@ -1139,7 +1139,8 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                                     hdr.Crc, calc_crc);
 
                                 /* Account for bytes already read */
-                                crc_len -= (2 + 4); /* Attributes + LastOffsetDelta */
+                                crc_len -=
+                                    (2 + 4); /* Attributes + LastOffsetDelta */
                         } else {
                                 rd_kafka_consumer_err(
                                     &msetr->msetr_rkq, msetr->msetr_broker_id,
@@ -1213,11 +1214,13 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                     payload_size);
                 if (err) {
                         /* For share consumer: decompression failed, error ops
-                         * already created. Buffer position already advanced past
-                         * compressed payload. Continue parsing next MessageSet.
-                         * For regular consumer: stop parsing. */
-                        if (RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk)) {
-                                rd_atomic64_add(&msetr->msetr_rkb->rkb_c.rx_err, 1);
+                         * already created. Buffer position already advanced
+                         * past compressed payload. Continue parsing next
+                         * MessageSet. For regular consumer: stop parsing. */
+                        if (RD_KAFKA_IS_SHARE_CONSUMER(
+                                msetr->msetr_rkb->rkb_rk)) {
+                                rd_atomic64_add(&msetr->msetr_rkb->rkb_c.rx_err,
+                                                1);
                                 goto done;
                         } else {
                                 goto err;
@@ -1338,15 +1341,16 @@ rd_kafka_msgset_reader_peek_msg_version(rd_kafka_msgset_reader_t *msetr,
                         rd_kafka_share_consumer_err_range(
                             &msetr->msetr_rkq, msetr->msetr_broker_id,
                             RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,
-                            msetr->msetr_tver->version, rktp, Offset, LastOffset,
-                            RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
+                            msetr->msetr_tver->version, rktp, Offset,
+                            LastOffset, RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
                             "Unsupported Message(Set) MagicByte %d at offsets "
                             "%" PRId64 "-%" PRId64,
                             (int)MagicByteActual, Offset, LastOffset);
 
                         /* Skip remaining bytes in MessageSet */
-                        bytes_read = rd_slice_offset(&rkbuf->rkbuf_reader) - len_start;
-                        remaining  = Length - bytes_read;
+                        bytes_read =
+                            rd_slice_offset(&rkbuf->rkbuf_reader) - len_start;
+                        remaining = Length - bytes_read;
                         rd_kafka_buf_skip(rkbuf, remaining);
                 } else {
                         /* Regular consumer: single error */
@@ -1361,8 +1365,8 @@ rd_kafka_msgset_reader_peek_msg_version(rd_kafka_msgset_reader_t *msetr,
                                     "at offset %" PRId64,
                                     (int)*MagicBytep, Offset);
                                 /* Skip message(set) */
-                                msetr->msetr_rktp->rktp_offsets.fetch_pos.offset =
-                                    Offset + 1;
+                                msetr->msetr_rktp->rktp_offsets.fetch_pos
+                                    .offset = Offset + 1;
                         }
 
                         /* Skip this Message(Set). */
@@ -1410,11 +1414,13 @@ rd_kafka_msgset_reader(rd_kafka_msgset_reader_t *msetr) {
                                  * due to its use of sendfile(2). */
                                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
-                        /* For share consumer: continue on unsupported MsgVersions,
-                         * the MessageSet will be skipped. Reset error so loop
-                         * continues parsing remaining MessageSets.
-                         * For regular consumer: stop parsing (old behavior). */
-                        if (RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk)) {
+                        /* For share consumer: continue on unsupported
+                         * MsgVersions, the MessageSet will be skipped. Reset
+                         * error so loop continues parsing remaining
+                         * MessageSets. For regular consumer: stop parsing (old
+                         * behavior). */
+                        if (RD_KAFKA_IS_SHARE_CONSUMER(
+                                msetr->msetr_rkb->rkb_rk)) {
                                 err = RD_KAFKA_RESP_ERR_NO_ERROR;
                         }
                         continue;

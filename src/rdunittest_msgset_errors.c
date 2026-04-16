@@ -95,9 +95,8 @@ static void ut_destroy_share_consumer(rd_kafka_share_t *rkshare) {
 /**
  * @brief Create a mock topic partition
  */
-static rd_kafka_toppar_t *ut_create_mock_toppar(rd_kafka_t *rk,
-                                                const char *topic,
-                                                int32_t partition) {
+static rd_kafka_toppar_t *
+ut_create_mock_toppar(rd_kafka_t *rk, const char *topic, int32_t partition) {
         rd_kafka_topic_t *rkt = rd_kafka_topic_new(rk, topic, NULL);
         if (!rkt)
                 return NULL;
@@ -184,8 +183,8 @@ static uint32_t ut_calc_msgset_crc(const char *buf,
                                    size_t offset_to_attributes,
                                    size_t total_len) {
         /* CRC starts after MagicByte and Crc field itself */
-        const void *data  = buf + offset_to_attributes;
-        size_t data_len   = total_len - offset_to_attributes;
+        const void *data = buf + offset_to_attributes;
+        size_t data_len  = total_len - offset_to_attributes;
         return rd_crc32c(0, data, data_len);
 }
 
@@ -219,8 +218,8 @@ static size_t ut_build_record_v2(char *buf,
         size_t record_start = 0;
         size_t offset       = 0;
         size_t len_offset;
-        int32_t key_len_varint  = key ? (int32_t)key_len : -1;
-        int32_t val_len_varint  = value ? (int32_t)value_len : -1;
+        int32_t key_len_varint = key ? (int32_t)key_len : -1;
+        int32_t val_len_varint = value ? (int32_t)value_len : -1;
 
         /* Reserve space for Length (varint) - we'll fill this in later */
         len_offset = offset;
@@ -264,8 +263,7 @@ static size_t ut_build_record_v2(char *buf,
 
         /* Compact the record if varint was smaller than 5 bytes */
         if (len_size < 5) {
-                memmove(buf + len_offset + len_size,
-                        buf + len_offset + 5,
+                memmove(buf + len_offset + len_size, buf + len_offset + 5,
                         record_body_len);
                 offset = len_offset + len_size + record_body_len;
         }
@@ -296,10 +294,9 @@ static size_t ut_build_valid_msgset_v2(char *buf,
         records_buf = rd_calloc(1, 8192);
         for (i = 0; i < record_count; i++) {
                 records_size += ut_build_record_v2(
-                    records_buf + records_size,
-                    i,   /* offsetDelta */
-                    0,   /* timestampDelta */
-                    NULL, 0, /* no key */
+                    records_buf + records_size, i, /* offsetDelta */
+                    0,                             /* timestampDelta */
+                    NULL, 0,                       /* no key */
                     values ? values[i] : NULL,
                     values && value_lens ? value_lens[i] : 0);
         }
@@ -365,7 +362,7 @@ static size_t ut_build_valid_msgset_v2(char *buf,
         rd_free(records_buf);
 
         /* Calculate and write Length */
-        int32_t length = (int32_t)(offset - len_offset - 4);
+        int32_t length                 = (int32_t)(offset - len_offset - 4);
         *(int32_t *)(buf + len_offset) = htobe32(length);
 
         /* Calculate and write CRC (covers Attributes to end) */
@@ -393,9 +390,10 @@ static int unittest_msgset_crc_error_share_consumer(void) {
         rd_kafka_q_t *response_q;
         char *msgset_data;
         size_t msgset_size;
-        int64_t BaseOffset       = 100;
-        int32_t LastOffsetDelta  = 4; /* Offsets 100-104 inclusive = 5 messages */
-        int expected_err_ops     = 5;
+        int64_t BaseOffset = 100;
+        int32_t LastOffsetDelta =
+            4; /* Offsets 100-104 inclusive = 5 messages */
+        int expected_err_ops = 5;
         int i;
         struct rd_kafka_toppar_ver tver = {.version = 11};
 
@@ -404,8 +402,7 @@ static int unittest_msgset_crc_error_share_consumer(void) {
         rkshare = ut_create_test_share_consumer();
         RD_UT_ASSERT(rkshare, "Failed to create share consumer");
 
-        rktp =
-            ut_create_mock_toppar(rkshare->rkshare_rk, "test-topic-crc", 0);
+        rktp = ut_create_mock_toppar(rkshare->rkshare_rk, "test-topic-crc", 0);
         RD_UT_ASSERT(rktp, "Failed to create toppar");
 
         response_q = rd_kafka_q_new(rkshare->rkshare_rk);
@@ -413,8 +410,10 @@ static int unittest_msgset_crc_error_share_consumer(void) {
         /* Craft MessageSet v2 with wrong CRC */
         /* MessageSet v2 structure:
          * - BaseOffset (8) + Length (4) = 12 bytes before "Length" data starts
-         * - Length field contains size of: PartitionLeaderEpoch (4) + MagicByte (1)
-         *   + Crc (4) + Attributes (2) + LastOffsetDelta (4) + BaseTimestamp (8)
+         * - Length field contains size of: PartitionLeaderEpoch (4) + MagicByte
+         * (1)
+         *   + Crc (4) + Attributes (2) + LastOffsetDelta (4) + BaseTimestamp
+         * (8)
          *   + MaxTimestamp (8) + ProducerId (8) + ProducerEpoch (2)
          *   + BaseSequence (4) + RecordCount (4) + Records
          * - Minimum Length = 49 (just the header fields after Length)
@@ -423,7 +422,7 @@ static int unittest_msgset_crc_error_share_consumer(void) {
 
         /* CRC validation needs: crc_len = Length - 4 - 1 - 4 bytes available
          * after reading up to Crc field (21 bytes read so far) */
-        int32_t Length = 61 - 12; /* Minimum: just the header, no records */
+        int32_t Length = 61 - 12;     /* Minimum: just the header, no records */
         msgset_size    = 12 + Length; /* BaseOffset + Length + data */
         msgset_data    = rd_calloc(1, msgset_size);
 
@@ -507,9 +506,10 @@ static int unittest_msgset_decompression_error_share_consumer(void) {
         rd_kafka_q_t *response_q;
         char *msgset_data;
         size_t msgset_size;
-        int64_t BaseOffset      = 200;
-        int32_t LastOffsetDelta = 2; /* Offsets 200-202 inclusive = 3 messages */
-        int expected_err_ops    = 3;
+        int64_t BaseOffset = 200;
+        int32_t LastOffsetDelta =
+            2; /* Offsets 200-202 inclusive = 3 messages */
+        int expected_err_ops = 3;
         int i;
         uint32_t correct_crc;
         size_t crc_offset = 17; /* Offset to CRC field in header */
@@ -570,10 +570,9 @@ static int unittest_msgset_decompression_error_share_consumer(void) {
                              expected_err_ops);
                 RD_UT_ASSERT(rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR,
                              "Expected CONSUMER_ERR op, got %d", rko->rko_type);
-                RD_UT_ASSERT(
-                    rko->rko_err == RD_KAFKA_RESP_ERR__BAD_COMPRESSION,
-                    "Expected BAD_COMPRESSION error, got %s",
-                    rd_kafka_err2str(rko->rko_err));
+                RD_UT_ASSERT(rko->rko_err == RD_KAFKA_RESP_ERR__BAD_COMPRESSION,
+                             "Expected BAD_COMPRESSION error, got %s",
+                             rd_kafka_err2str(rko->rko_err));
                 RD_UT_ASSERT(rko->rko_u.err.offset == BaseOffset + i,
                              "Expected offset %" PRId64 ", got %" PRId64,
                              BaseOffset + i, rko->rko_u.err.offset);
@@ -617,9 +616,10 @@ static int unittest_msgset_unsupported_magic_share_consumer(void) {
         rd_kafka_q_t *response_q;
         char *msgset_data;
         size_t msgset_size;
-        int64_t BaseOffset      = 300;
-        int32_t LastOffsetDelta = 9; /* Offsets 300-309 inclusive = 10 messages */
-        int expected_err_ops    = 10;
+        int64_t BaseOffset = 300;
+        int32_t LastOffsetDelta =
+            9; /* Offsets 300-309 inclusive = 10 messages */
+        int expected_err_ops = 10;
         int i;
         struct rd_kafka_toppar_ver tver = {.version = 11};
 
@@ -669,10 +669,9 @@ static int unittest_msgset_unsupported_magic_share_consumer(void) {
                              expected_err_ops);
                 RD_UT_ASSERT(rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR,
                              "Expected CONSUMER_ERR op, got %d", rko->rko_type);
-                RD_UT_ASSERT(
-                    rko->rko_err == RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,
-                    "Expected NOT_IMPLEMENTED error, got %s",
-                    rd_kafka_err2str(rko->rko_err));
+                RD_UT_ASSERT(rko->rko_err == RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,
+                             "Expected NOT_IMPLEMENTED error, got %s",
+                             rd_kafka_err2str(rko->rko_err));
                 RD_UT_ASSERT(rko->rko_u.err.offset == BaseOffset + i,
                              "Expected offset %" PRId64 ", got %" PRId64,
                              BaseOffset + i, rko->rko_u.err.offset);
@@ -714,12 +713,11 @@ static int unittest_msgset_mixed_success_crc_success(void) {
         rd_kafka_buf_t *rkbuf;
         rd_kafka_q_t *response_q;
         char *buffer;
-        size_t buffer_size = 4096;
-        size_t offset      = 0;
+        size_t buffer_size              = 4096;
+        size_t offset                   = 0;
         struct rd_kafka_toppar_ver tver = {.version = 11};
-        const char *values[]            = {"msg1", "msg2", "msg3",
-                                            "msg4", "msg5"};
-        size_t value_lens[]             = {4, 4, 4, 4, 4};
+        const char *values[] = {"msg1", "msg2", "msg3", "msg4", "msg5"};
+        size_t value_lens[]  = {4, 4, 4, 4, 4};
         int i;
 
         RD_UT_BEGIN();
@@ -727,7 +725,8 @@ static int unittest_msgset_mixed_success_crc_success(void) {
         rkshare = ut_create_test_share_consumer();
         RD_UT_ASSERT(rkshare, "Failed to create share consumer");
 
-        rktp = ut_create_mock_toppar(rkshare->rkshare_rk, "test-topic-mixed", 0);
+        rktp =
+            ut_create_mock_toppar(rkshare->rkshare_rk, "test-topic-mixed", 0);
         RD_UT_ASSERT(rktp, "Failed to create toppar");
 
         response_q = rd_kafka_q_new(rkshare->rkshare_rk);
@@ -738,32 +737,32 @@ static int unittest_msgset_mixed_success_crc_success(void) {
                                            value_lens);
 
         /* MessageSet 2: CRC error with 5 messages (offsets 103-107) */
-        size_t msgset2_start = offset;
-        int64_t BaseOffset2  = 103;
+        size_t msgset2_start     = offset;
+        int64_t BaseOffset2      = 103;
         int32_t LastOffsetDelta2 = 4;
-        int32_t Length2 = 61 - 12; /* Just header */
-        ut_write_msgset_v2_header(
-            buffer + offset, BaseOffset2, Length2, -1, 2,
-            0xBADC0C, /* Wrong CRC */
-            0, LastOffsetDelta2, 0, 0, -1, -1, -1, 5);
+        int32_t Length2          = 61 - 12; /* Just header */
+        ut_write_msgset_v2_header(buffer + offset, BaseOffset2, Length2, -1, 2,
+                                  0xBADC0C, /* Wrong CRC */
+                                  0, LastOffsetDelta2, 0, 0, -1, -1, -1, 5);
         offset += 12 + Length2;
 
         /* MessageSet 3: Valid with 2 messages (offsets 108-109) */
-        const char *values3[]  = {"msg6", "msg7"};
-        size_t value_lens3[] = {4, 4};
+        const char *values3[] = {"msg6", "msg7"};
+        size_t value_lens3[]  = {4, 4};
         offset += ut_build_valid_msgset_v2(buffer + offset, 108, 2, values3,
                                            value_lens3);
 
         /* Parse all MessageSets */
-        rkbuf                = rd_kafka_buf_new_shadow(buffer, offset, rd_free);
-        rkbuf->rkbuf_rkb     = rd_kafka_broker_internal(rkshare->rkshare_rk);
+        rkbuf            = rd_kafka_buf_new_shadow(buffer, offset, rd_free);
+        rkbuf->rkbuf_rkb = rd_kafka_broker_internal(rkshare->rkshare_rk);
 
         rd_kafka_share_msgset_parse(rkbuf, rktp, NULL, &tver, response_q);
 
         /* Verify MessageSet 1: 3 FETCH ops with offsets 100-102 */
         for (i = 0; i < 3; i++) {
                 rd_kafka_op_t *rko = rd_kafka_q_pop(response_q, 1000, 0);
-                RD_UT_ASSERT(rko != NULL, "Expected FETCH op %d, got timeout", i);
+                RD_UT_ASSERT(rko != NULL, "Expected FETCH op %d, got timeout",
+                             i);
                 RD_UT_ASSERT(rko->rko_type == RD_KAFKA_OP_FETCH,
                              "Expected FETCH op, got %d", rko->rko_type);
                 RD_UT_ASSERT(rko->rko_u.fetch.rkm.rkm_offset == 100 + i,
@@ -775,8 +774,8 @@ static int unittest_msgset_mixed_success_crc_success(void) {
         /* Verify MessageSet 2: 5 CONSUMER_ERR ops with offsets 103-107 */
         for (i = 0; i < 5; i++) {
                 rd_kafka_op_t *rko = rd_kafka_q_pop(response_q, 1000, 0);
-                RD_UT_ASSERT(rko != NULL, "Expected CRC error op %d, got timeout",
-                             i);
+                RD_UT_ASSERT(rko != NULL,
+                             "Expected CRC error op %d, got timeout", i);
                 RD_UT_ASSERT(rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR,
                              "Expected CONSUMER_ERR op, got %d", rko->rko_type);
                 RD_UT_ASSERT(rko->rko_err == RD_KAFKA_RESP_ERR__BAD_MSG,
@@ -834,8 +833,8 @@ static int unittest_msgset_mixed_crc_success_decomp(void) {
         rd_kafka_buf_t *rkbuf;
         rd_kafka_q_t *response_q;
         char *buffer;
-        size_t buffer_size = 4096;
-        size_t offset      = 0;
+        size_t buffer_size              = 4096;
+        size_t offset                   = 0;
         struct rd_kafka_toppar_ver tver = {.version = 11};
         const char *values[]            = {"a", "b", "c", "d"};
         size_t value_lens[]             = {1, 1, 1, 1};
@@ -846,7 +845,8 @@ static int unittest_msgset_mixed_crc_success_decomp(void) {
         rkshare = ut_create_test_share_consumer();
         RD_UT_ASSERT(rkshare, "Failed to create share consumer");
 
-        rktp = ut_create_mock_toppar(rkshare->rkshare_rk, "test-topic-mixed2", 0);
+        rktp =
+            ut_create_mock_toppar(rkshare->rkshare_rk, "test-topic-mixed2", 0);
         RD_UT_ASSERT(rktp, "Failed to create toppar");
 
         response_q = rd_kafka_q_new(rkshare->rkshare_rk);
@@ -861,7 +861,8 @@ static int unittest_msgset_mixed_crc_success_decomp(void) {
         offset += ut_build_valid_msgset_v2(buffer + offset, 202, 4, values,
                                            value_lens);
 
-        /* MessageSet 3: Decompression error with 3 messages (offsets 206-208) */
+        /* MessageSet 3: Decompression error with 3 messages (offsets 206-208)
+         */
         char corrupted_data[16] = {0xDE, 0xAD, 0xBE, 0xEF}; /* Garbage */
         size_t decomp_start     = offset;
         ut_write_msgset_v2_header(buffer + offset, 206,
@@ -952,8 +953,8 @@ static int unittest_msgset_mixed_magic_success_crc_success(void) {
         rd_kafka_buf_t *rkbuf;
         rd_kafka_q_t *response_q;
         char *buffer;
-        size_t buffer_size = 4096;
-        size_t offset      = 0;
+        size_t buffer_size              = 4096;
+        size_t offset                   = 0;
         struct rd_kafka_toppar_ver tver = {.version = 11};
         const char *value1              = "x";
         size_t value_len1               = 1;
@@ -966,13 +967,15 @@ static int unittest_msgset_mixed_magic_success_crc_success(void) {
         rkshare = ut_create_test_share_consumer();
         RD_UT_ASSERT(rkshare, "Failed to create share consumer");
 
-        rktp = ut_create_mock_toppar(rkshare->rkshare_rk, "test-topic-mixed3", 0);
+        rktp =
+            ut_create_mock_toppar(rkshare->rkshare_rk, "test-topic-mixed3", 0);
         RD_UT_ASSERT(rktp, "Failed to create toppar");
 
         response_q = rd_kafka_q_new(rkshare->rkshare_rk);
         buffer     = rd_calloc(1, buffer_size);
 
-        /* MessageSet 1: Unsupported MagicByte=99, 3 messages (offsets 300-302) */
+        /* MessageSet 1: Unsupported MagicByte=99, 3 messages (offsets 300-302)
+         */
         ut_write_msgset_v2_header(buffer + offset, 300, 61 - 12, -1,
                                   99, /* Unsupported */
                                   0, 0, 2, 0, 0, -1, -1, -1, 3);
@@ -997,7 +1000,8 @@ static int unittest_msgset_mixed_magic_success_crc_success(void) {
 
         rd_kafka_share_msgset_parse(rkbuf, rktp, NULL, &tver, response_q);
 
-        /* Verify MessageSet 1: 3 unsupported magic error ops (offsets 300-302) */
+        /* Verify MessageSet 1: 3 unsupported magic error ops (offsets 300-302)
+         */
         for (i = 0; i < 3; i++) {
                 rd_kafka_op_t *rko = rd_kafka_q_pop(response_q, 1000, 0);
                 RD_UT_ASSERT(rko != NULL, "Expected magic error op %d", i);
@@ -1065,7 +1069,8 @@ static int unittest_msgset_mixed_magic_success_crc_success(void) {
 /**
  * @brief Test all successful MessageSets
  *
- * Verifies parser correctly handles multiple consecutive successful MessageSets:
+ * Verifies parser correctly handles multiple consecutive successful
+ * MessageSets:
  * - MessageSet 1: 2 messages (offsets 400-401)
  * - MessageSet 2: 3 messages (offsets 402-404)
  * - MessageSet 3: 1 message (offset 405)
@@ -1077,8 +1082,8 @@ static int unittest_msgset_all_success(void) {
         rd_kafka_buf_t *rkbuf;
         rd_kafka_q_t *response_q;
         char *buffer;
-        size_t buffer_size = 4096;
-        size_t offset      = 0;
+        size_t buffer_size              = 4096;
+        size_t offset                   = 0;
         struct rd_kafka_toppar_ver tver = {.version = 11};
         const char *values2[]           = {"m1", "m2"};
         size_t value_lens2[]            = {2, 2};
@@ -1095,7 +1100,8 @@ static int unittest_msgset_all_success(void) {
         rkshare = ut_create_test_share_consumer();
         RD_UT_ASSERT(rkshare, "Failed to create share consumer");
 
-        rktp = ut_create_mock_toppar(rkshare->rkshare_rk, "test-topic-success", 0);
+        rktp =
+            ut_create_mock_toppar(rkshare->rkshare_rk, "test-topic-success", 0);
         RD_UT_ASSERT(rktp, "Failed to create toppar");
 
         response_q = rd_kafka_q_new(rkshare->rkshare_rk);
@@ -1120,7 +1126,8 @@ static int unittest_msgset_all_success(void) {
         /* Verify all 10 messages received successfully (offsets 400-409) */
         for (i = 0; i < 10; i++) {
                 rd_kafka_op_t *rko = rd_kafka_q_pop(response_q, 1000, 0);
-                RD_UT_ASSERT(rko != NULL, "Expected FETCH op %d, got timeout", i);
+                RD_UT_ASSERT(rko != NULL, "Expected FETCH op %d, got timeout",
+                             i);
                 RD_UT_ASSERT(rko->rko_type == RD_KAFKA_OP_FETCH,
                              "Expected FETCH op, got %d", rko->rko_type);
                 RD_UT_ASSERT(rko->rko_u.fetch.rkm.rkm_offset == 400 + i,
@@ -1158,8 +1165,8 @@ static int unittest_msgset_all_errors(void) {
         rd_kafka_buf_t *rkbuf;
         rd_kafka_q_t *response_q;
         char *buffer;
-        size_t buffer_size = 4096;
-        size_t offset      = 0;
+        size_t buffer_size              = 4096;
+        size_t offset                   = 0;
         struct rd_kafka_toppar_ver tver = {.version = 11};
         int i;
 
@@ -1168,7 +1175,8 @@ static int unittest_msgset_all_errors(void) {
         rkshare = ut_create_test_share_consumer();
         RD_UT_ASSERT(rkshare, "Failed to create share consumer");
 
-        rktp = ut_create_mock_toppar(rkshare->rkshare_rk, "test-topic-errors", 0);
+        rktp =
+            ut_create_mock_toppar(rkshare->rkshare_rk, "test-topic-errors", 0);
         RD_UT_ASSERT(rktp, "Failed to create toppar");
 
         response_q = rd_kafka_q_new(rkshare->rkshare_rk);
@@ -1180,8 +1188,8 @@ static int unittest_msgset_all_errors(void) {
         offset += 61;
 
         /* MessageSet 2: Unsupported MagicByte, 1 message (offset 502) */
-        ut_write_msgset_v2_header(buffer + offset, 502, 61 - 12, -1, 99, 0, 0, 0,
-                                  0, 0, -1, -1, -1, 1);
+        ut_write_msgset_v2_header(buffer + offset, 502, 61 - 12, -1, 99, 0, 0,
+                                  0, 0, 0, -1, -1, -1, 1);
         offset += 61;
 
         /* MessageSet 3: CRC error, 3 messages (offsets 503-505) */
@@ -1269,11 +1277,11 @@ static int unittest_msgset_all_error_types_with_valid(void) {
         rd_kafka_buf_t *rkbuf;
         rd_kafka_q_t *response_q;
         char *buffer;
-        size_t buffer_size = 8192;
-        size_t offset      = 0;
+        size_t buffer_size              = 8192;
+        size_t offset                   = 0;
         struct rd_kafka_toppar_ver tver = {.version = 11};
         const char *values[]            = {"a", "b", "c", "d", "e",
-                                            "f", "g", "h", "i", "j"};
+                                           "f", "g", "h", "i", "j"};
         size_t value_lens[]             = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
         int i;
 
@@ -1290,8 +1298,8 @@ static int unittest_msgset_all_error_types_with_valid(void) {
         buffer     = rd_calloc(1, buffer_size);
 
         /* MessageSet 1: CRC error with 10 messages (offsets 0-9) */
-        ut_write_msgset_v2_header(buffer + offset, 0, 100, -1, 2, 0xBADC0001,
-                                  0, 9, 0, 0, -1, -1, -1, 10);
+        ut_write_msgset_v2_header(buffer + offset, 0, 100, -1, 2, 0xBADC0001, 0,
+                                  9, 0, 0, -1, -1, -1, 10);
         offset += 112;
 
         /* MessageSet 2: Valid with 10 messages (offsets 10-19) */
@@ -1318,8 +1326,10 @@ static int unittest_msgset_all_error_types_with_valid(void) {
         offset += ut_build_valid_msgset_v2(buffer + offset, 30, 10, values,
                                            value_lens);
 
-        /* MessageSet 5: Unsupported MagicByte with 10 messages (offsets 40-49) */
-        ut_write_msgset_v2_header(buffer + offset, 40, 100, -1, 99, /* Bad magic */
+        /* MessageSet 5: Unsupported MagicByte with 10 messages (offsets 40-49)
+         */
+        ut_write_msgset_v2_header(buffer + offset, 40, 100, -1,
+                                  99, /* Bad magic */
                                   0, 0, 9, 0, 0, -1, -1, -1, 10);
         offset += 112;
 
@@ -1349,10 +1359,9 @@ static int unittest_msgset_all_error_types_with_valid(void) {
                 RD_UT_ASSERT(rko->rko_u.err.offset == 0 + i,
                              "Expected offset %d, got %" PRId64, i,
                              rko->rko_u.err.offset);
-                RD_UT_ASSERT(
-                    rko->rko_u.err.rkm.rkm_u.consumer.ack_type ==
-                        RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
-                    "Expected REJECT ack_type for CRC error");
+                RD_UT_ASSERT(rko->rko_u.err.rkm.rkm_u.consumer.ack_type ==
+                                 RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
+                             "Expected REJECT ack_type for CRC error");
                 rd_kafka_op_destroy(rko);
         }
 
@@ -1394,11 +1403,11 @@ static int unittest_msgset_all_error_types_with_valid(void) {
         RD_UT_SAY("Verifying MessageSet 4: Valid messages after decomp error");
         for (i = 0; i < 10; i++) {
                 rd_kafka_op_t *rko = rd_kafka_q_pop(response_q, 1000, 0);
-                RD_UT_ASSERT(
-                    rko != NULL,
-                    "Expected FETCH op %d of 10 after decomp error, got timeout "
-                    "(BUG: parser stopped!)",
-                    i);
+                RD_UT_ASSERT(rko != NULL,
+                             "Expected FETCH op %d of 10 after decomp error, "
+                             "got timeout "
+                             "(BUG: parser stopped!)",
+                             i);
                 RD_UT_ASSERT(rko->rko_type == RD_KAFKA_OP_FETCH,
                              "Expected FETCH op, got %d", rko->rko_type);
                 RD_UT_ASSERT(rko->rko_u.fetch.rkm.rkm_offset == 30 + i,
@@ -1407,11 +1416,13 @@ static int unittest_msgset_all_error_types_with_valid(void) {
                 rd_kafka_op_destroy(rko);
         }
 
-        /* Verify MessageSet 5: 10 unsupported magic error ops (offsets 40-49) */
+        /* Verify MessageSet 5: 10 unsupported magic error ops (offsets 40-49)
+         */
         RD_UT_SAY("Verifying MessageSet 5: Unsupported MagicByte errors");
         for (i = 0; i < 10; i++) {
                 rd_kafka_op_t *rko = rd_kafka_q_pop(response_q, 1000, 0);
-                RD_UT_ASSERT(rko != NULL, "Expected magic error op %d of 10", i);
+                RD_UT_ASSERT(rko != NULL, "Expected magic error op %d of 10",
+                             i);
                 RD_UT_ASSERT(rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR,
                              "Expected CONSUMER_ERR, got %d", rko->rko_type);
                 RD_UT_ASSERT(rko->rko_err == RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,
@@ -1420,10 +1431,9 @@ static int unittest_msgset_all_error_types_with_valid(void) {
                 RD_UT_ASSERT(rko->rko_u.err.offset == 40 + i,
                              "Expected offset %d, got %" PRId64, 40 + i,
                              rko->rko_u.err.offset);
-                RD_UT_ASSERT(
-                    rko->rko_u.err.rkm.rkm_u.consumer.ack_type ==
-                        RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
-                    "Expected REJECT ack_type for unsupported magic");
+                RD_UT_ASSERT(rko->rko_u.err.rkm.rkm_u.consumer.ack_type ==
+                                 RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
+                             "Expected REJECT ack_type for unsupported magic");
                 rd_kafka_op_destroy(rko);
         }
 
@@ -1447,12 +1457,12 @@ static int unittest_msgset_all_error_types_with_valid(void) {
         /* Verify no extra ops */
         {
                 rd_kafka_op_t *rko = rd_kafka_q_pop(response_q, 100, 0);
-                RD_UT_ASSERT(rko == NULL,
-                             "Unexpected extra op of type %d",
+                RD_UT_ASSERT(rko == NULL, "Unexpected extra op of type %d",
                              rko ? rko->rko_type : -1);
         }
 
-        RD_UT_SAY("SUCCESS: All 6 MessageSets processed correctly (60 ops total)");
+        RD_UT_SAY(
+            "SUCCESS: All 6 MessageSets processed correctly (60 ops total)");
 
         rd_kafka_buf_destroy(rkbuf);
         rd_kafka_q_destroy_owner(response_q);
