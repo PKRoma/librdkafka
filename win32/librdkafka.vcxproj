@@ -215,12 +215,7 @@
     <ClCompile Include="..\src\rdkafka_sasl_oauthbearer.c" />
     <ClCompile Include="..\src\rdkafka_sasl_oauthbearer_oidc.c" />
     <ClCompile Include="..\src\rdkafka_aws_sts.c" />
-    <ClCompile Include="..\src\rdkafka_aws_sts_impl.cpp">
-      <!-- AWS SDK DLLs are built with /MD; match that to avoid CRT symbol
-           mismatch (LNK2019 on __imp_ std::ostream symbols). -->
-      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreadedDLL</RuntimeLibrary>
-      <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebugDLL</RuntimeLibrary>
-    </ClCompile>
+    <ClCompile Include="..\src\rdkafka_aws_sts_impl.cpp" />
     <ClCompile Include="..\src\rdkafka_subscription.c" />
     <ClCompile Include="..\src\rdkafka_assignment.c" />
     <ClCompile Include="..\src\rdkafka_timer.c" />
