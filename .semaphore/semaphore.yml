@@ -246,14 +246,18 @@ blocks:
           - cd librdkafka
           - $msbuild = (& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe); & $msbuild win32\librdkafka.sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v142; if ($LASTEXITCODE -ne 0) { throw "Build failed" }
           # Setup WSL2 with Ubuntu for running Kafka (avoids Windows NTFS file locking issues)
+          - wsl --install --no-distribution
           - wsl --install --distribution Ubuntu-24.04 --no-launch
           - wsl --set-default Ubuntu-24.04
-          # Install Java and Python inside WSL
-          - wsl bash -c "sudo apt-get update && sudo apt-get install -y openjdk-21-jdk-headless python3 python3-pip python3-venv"
+          # Install Java inside WSL
+          - wsl bash -c "sudo apt-get update && sudo apt-get install -y openjdk-21-jdk-headless"
       epilogue:
-        commands:
-          - try { wsl bash -c "pkill -f kafka" } catch {}
-          - try { wsl --shutdown } catch {}
+        always:
+          commands:
+            - try { wsl bash -c "pkill -f kafka" } catch {}
+            - try { wsl --shutdown } catch {}
+            # DEBUG: Sleep 3 hours for SSH debugging
+            - Start-Sleep -Seconds 10800
       jobs:
         - name: 'Build and run share consumer tests'
           commands:
@@ -268,8 +272,6 @@ blocks:
             - cd tests
             - Set-Content test.conf "bootstrap.servers=localhost:9092`nbroker.address.family=v4"
             - Remove-Item Env:TESTS -ErrorAction SilentlyContinue; Remove-Item Env:TESTS_SKIP -ErrorAction SilentlyContinue; $env:RDKAFKA_TEST_CONF = "test.conf"; $env:TESTS_SKIP_BEFORE = "0170"; & ..\win32\outdir\v142\x64\Release\tests.exe
-            # DEBUG: Sleep 3 hours for SSH debugging
-            - Start-Sleep -Seconds 10800
 
   - name: 'Linux x64: release artifact docker builds'
     dependencies: []
