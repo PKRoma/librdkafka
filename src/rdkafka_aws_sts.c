@@ -45,8 +45,10 @@
 
 #include "rdkafka_aws_sts.h"
 
-rd_kafka_resp_err_t rd_kafka_aws_sts_token_refresh(const char *audience, char *token_buf, size_t token_buf_size, int64_t *expiry_ms, char *errstr, size_t errstr_size) {
-        return rd_kafka_aws_sts_get_web_identity_token(audience, token_buf, token_buf_size, expiry_ms, errstr, errstr_size);
-}
+/* Function pointer prevents the linker from stripping rdkafka_aws_sts_impl.cpp
+ * until the full SASL OAUTHBEARER wiring is complete. */
+rd_kafka_resp_err_t (*rd_kafka_aws_sts_get_web_identity_token_fp)(
+    const char *, char *, size_t, int64_t *, char *, size_t) =
+    rd_kafka_aws_sts_get_web_identity_token;
 
 #endif /* WITH_AWS_STS */

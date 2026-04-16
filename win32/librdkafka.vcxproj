@@ -78,6 +78,9 @@
       <AdditionalOptions>/SAFESEH:NO</AdditionalOptions>
       <IgnoreSpecificDefaultLibraries>libcmt.lib</IgnoreSpecificDefaultLibraries>
       <AdditionalDependencies>msvcprt.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <!-- Force linker to keep AWS STS impl until full OAUTHBEARER wiring is done.
+           x86 MSVC decorates extern "C" symbols with a leading underscore. -->
+      <ForceSymbolReferences>_rd_kafka_aws_sts_get_web_identity_token</ForceSymbolReferences>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -97,6 +100,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <!-- Force linker to keep AWS STS impl until full OAUTHBEARER wiring is done. -->
+      <ForceSymbolReferences>rd_kafka_aws_sts_get_web_identity_token</ForceSymbolReferences>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
