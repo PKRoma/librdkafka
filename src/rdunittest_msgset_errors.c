@@ -215,7 +215,6 @@ static size_t ut_build_record_v2(char *buf,
                                  size_t key_len,
                                  const char *value,
                                  size_t value_len) {
-        size_t record_start = 0;
         size_t offset       = 0;
         size_t len_offset;
         int32_t key_len_varint = key ? (int32_t)key_len : -1;
@@ -282,8 +281,6 @@ static size_t ut_build_valid_msgset_v2(char *buf,
                                        size_t *value_lens) {
         size_t offset     = 0;
         size_t len_offset = 8;
-        size_t header_start;
-        size_t records_start;
         size_t records_size = 0;
         int32_t i;
         char *records_buf;
@@ -308,8 +305,6 @@ static size_t ut_build_valid_msgset_v2(char *buf,
         /* Length - will update later */
         len_offset = offset;
         offset += 4;
-
-        header_start = offset;
 
         /* PartitionLeaderEpoch */
         *(int32_t *)(buf + offset) = htobe32(-1);
@@ -353,8 +348,6 @@ static size_t ut_build_valid_msgset_v2(char *buf,
         /* RecordCount */
         *(int32_t *)(buf + offset) = htobe32(record_count);
         offset += 4;
-
-        records_start = offset;
 
         /* Copy records */
         memcpy(buf + offset, records_buf, records_size);
@@ -737,7 +730,6 @@ static int unittest_msgset_mixed_success_crc_success(void) {
                                            value_lens);
 
         /* MessageSet 2: CRC error with 5 messages (offsets 103-107) */
-        size_t msgset2_start     = offset;
         int64_t BaseOffset2      = 103;
         int32_t LastOffsetDelta2 = 4;
         int32_t Length2          = 61 - 12; /* Just header */
