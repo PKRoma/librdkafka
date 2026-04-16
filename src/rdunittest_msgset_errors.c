@@ -175,6 +175,7 @@ static void ut_write_msgset_v2_header(char *buf,
         offset += 4;
 }
 
+#if WITH_ZSTD
 /**
  * @brief Calculate correct CRC32C for MessageSet v2
  *        CRC covers from Attributes to end of records
@@ -187,6 +188,7 @@ static uint32_t ut_calc_msgset_crc(const char *buf,
         size_t data_len  = total_len - offset_to_attributes;
         return rd_crc32c(0, data, data_len);
 }
+#endif /* WITH_ZSTD */
 
 /**
  * @brief Write a varint (used in Record format)
@@ -215,7 +217,7 @@ static size_t ut_build_record_v2(char *buf,
                                  size_t key_len,
                                  const char *value,
                                  size_t value_len) {
-        size_t offset       = 0;
+        size_t offset = 0;
         size_t len_offset;
         int32_t key_len_varint = key ? (int32_t)key_len : -1;
         int32_t val_len_varint = value ? (int32_t)value_len : -1;
@@ -279,8 +281,8 @@ static size_t ut_build_valid_msgset_v2(char *buf,
                                        int32_t record_count,
                                        const char **values,
                                        size_t *value_lens) {
-        size_t offset     = 0;
-        size_t len_offset = 8;
+        size_t offset       = 0;
+        size_t len_offset   = 8;
         size_t records_size = 0;
         int32_t i;
         char *records_buf;
