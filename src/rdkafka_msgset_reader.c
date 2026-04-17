@@ -1137,10 +1137,6 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                                     "calculated 0x%" PRIx32 ")",
                                     hdr.BaseOffset, LastOffset, hdr.Length,
                                     hdr.Crc, calc_crc);
-
-                                /* Account for bytes already read */
-                                crc_len -=
-                                    (2 + 4); /* Attributes + LastOffsetDelta */
                         } else {
                                 rd_kafka_consumer_err(
                                     &msetr->msetr_rkq, msetr->msetr_broker_id,

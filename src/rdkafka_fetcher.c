@@ -1102,18 +1102,8 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                         entry->types[offset - entry->start_offset] =
                             rd_kafka_share_ack_type_from_msg_op(msg_rko);
 
-                        if (msg_rko->rko_type == RD_KAFKA_OP_FETCH) {
-                                rd_list_add(
-                                    response_rko->rko_u.share_fetch_response
-                                        .message_rkos,
-                                    msg_rko);
-                                msg_cnt++;
-                        } else if (msg_rko->rko_type ==
-                                   RD_KAFKA_OP_CONSUMER_ERR) {
-                                /* Add error ops to message list along with
-                                 * fetch ops. Error ops have ack_type already
-                                 * set and will be delivered to application in
-                                 * the same message stream. */
+                        if (msg_rko->rko_type == RD_KAFKA_OP_FETCH ||
+                            msg_rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
                                 rd_list_add(
                                     response_rko->rko_u.share_fetch_response
                                         .message_rkos,
