@@ -1007,11 +1007,10 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
 
         /* Topic deletion tests */
 #ifndef _WIN32
-        /* Skip on Windows: topic deletion causes broker crash due to
-         * NTFS file locking (KAFKA-1194). */
+        /* Skip on Windows: topic deletion causes broker crash */
         do_test_scenario(&test_topic_deletion);
 #else
-        TEST_SAY("Skipping topic deletion test on Windows (KAFKA-1194)\n");
+        TEST_SAY("Skipping topic deletion test on Windows\n");
 #endif
 
         /* Stress tests */
