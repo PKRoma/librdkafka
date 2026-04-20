@@ -10,7 +10,7 @@ import subprocess
 import re
 from packaging import Package, Mapping
 
-SEMVER_PREFIX = re.compile(r"^\d+.\d+.\d+")
+SEMVER_PREFIX = re.compile(r"^\d+\.\d+\.\d+")
 
 
 class NugetPackage (Package):
