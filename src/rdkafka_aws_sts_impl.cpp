@@ -83,7 +83,7 @@ extern "C" {
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, error code otherwise.
  */
-extern "C" rd_kafka_resp_err_t
+extern "C" RD_KAFKA_AWS_STS_API rd_kafka_resp_err_t
 rd_kafka_aws_sts_get_web_identity_token(const char *audience,
                                         char *token_buf,
                                         size_t token_buf_size,

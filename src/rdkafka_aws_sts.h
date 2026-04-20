@@ -29,6 +29,31 @@
 #ifndef _RDKAFKA_AWS_STS_H_
 #define _RDKAFKA_AWS_STS_H_
 
+#include <stddef.h>  /* size_t */
+#include <stdint.h>  /* int64_t */
+
+#include "rdkafka.h" /* rd_kafka_resp_err_t */
+
+/**
+ * @brief Import/export macro for the rdkafka-aws-sts shim DLL on Windows.
+ *
+ * The implementation lives in a separate DLL (rdkafka-aws-sts.dll). When
+ * that DLL is being built, RD_KAFKA_AWS_STS_BUILDING_DLL is defined and we
+ * emit dllexport on the function declaration. When librdkafka (or any other
+ * consumer) includes this header, the macro is not defined and we emit
+ * dllimport so the linker resolves the symbol against rdkafka-aws-sts.lib.
+ * On non-Windows platforms the macro expands to nothing.
+ */
+#if defined(_WIN32)
+#if defined(RD_KAFKA_AWS_STS_BUILDING_DLL)
+#define RD_KAFKA_AWS_STS_API __declspec(dllexport)
+#else
+#define RD_KAFKA_AWS_STS_API __declspec(dllimport)
+#endif
+#else
+#define RD_KAFKA_AWS_STS_API
+#endif
+
 /**
  * @brief Obtain a signed JWT from AWS STS via GetWebIdentityToken.
  *
@@ -54,7 +79,7 @@
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or an error code with
  *          a description written to \p errstr on failure.
  */
-rd_kafka_resp_err_t rd_kafka_aws_sts_get_web_identity_token(
+RD_KAFKA_AWS_STS_API rd_kafka_resp_err_t rd_kafka_aws_sts_get_web_identity_token(
     const char *audience,
     char *token_buf,
     size_t token_buf_size,
