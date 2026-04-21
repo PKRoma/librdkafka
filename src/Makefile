@@ -20,7 +20,7 @@ SRCS_$(WITH_ZLIB) += rdgz.c
 SRCS_$(WITH_ZSTD) += rdkafka_zstd.c
 SRCS_$(WITH_HDRHISTOGRAM) += rdhdrhistogram.c
 SRCS_$(WITH_SSL) += rdkafka_ssl.c
-SRCS_$(WITH_CURL) += rdhttp.c rdkafka_aws_credentials.c
+SRCS_$(WITH_CURL) += rdhttp.c rdkafka_aws_credentials.c rdkafka_aws_sts.c
 SRCS_$(WITH_OAUTHBEARER_OIDC) += rdkafka_sasl_oauthbearer_oidc.c
 
 SRCS_LZ4 = rdxxhash.c

@@ -227,6 +227,33 @@ rd_kafka_aws_creds_provider_resolve(rd_kafka_aws_creds_provider_t *p,
                                     size_t errstr_size);
 
 
+/*
+ * Shared helpers used by both rdkafka_aws_credentials.c and rdkafka_aws_sts.c.
+ * Kept here rather than in a separate header because the two files form a
+ * small tightly-coupled subsystem and an extra header would be overkill.
+ */
+
+/**
+ * @brief Parse an ISO 8601 / RFC 3339 timestamp string to UTC epoch seconds.
+ *
+ * Accepts `Z`, `+HH:MM`, `+HHMM`, `-HH:MM` offset forms and optional
+ * fractional seconds. Timezone designator is REQUIRED (strict form).
+ *
+ * @returns rd_true on success with \p *epoch_seconds set, else rd_false.
+ */
+rd_bool_t rd_aws_parse_iso8601_utc(const char *iso, int64_t *epoch_seconds);
+
+/**
+ * @brief Convert wall-clock Unix-epoch seconds to an rd_clock()-basis
+ *        absolute microsecond timestamp. Clock-jump-safe because the
+ *        delta is computed at call time.
+ *
+ * @returns rd_clock() if the input is already in the past, else the
+ *          absolute monotonic us value.
+ */
+rd_ts_t rd_aws_epoch_to_monotonic_us(int64_t exp_epoch);
+
+
 #if WITH_CURL
 int unittest_aws_credentials(void);
 #endif

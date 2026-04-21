@@ -381,7 +381,11 @@ Ordered by dependencies. Each phase has a concrete "definition of done" and test
 
 ---
 
-### Milestone 7 — `GetWebIdentityToken` STS client
+### Milestone 7 — `GetWebIdentityToken` STS client ✅ DONE
+
+**Validated end-to-end against real AWS STS on EC2 Amazon Linux 2023** (2026-04-21). The `ut_sts_real` test performed: IMDSv2 credential fetch → `CURLOPT_AWS_SIGV4`-signed POST to `sts.eu-north-1.amazonaws.com/` → HTTP 200 with 1467-byte AWS-signed JWT → parsed Expiration matching the requested 300 s duration (299 s observed including round-trip). This proves libcurl's SigV4 signing is correct when driven from our C code, and that the full Probe A/B success path works autonomously.
+
+Note on test fixture: the IAM role used (`ktrue-iam-sts-test-role`) has an `sts:IdentityTokenAudience` condition restricting the allowed audience to `https://api.example.com` — `ut_sts_real` defaults to that value and can be overridden via the `RD_UT_AWS_AUDIENCE` env var for different policies. An audience mismatch surfaces as `AccessDenied` "no identity-based policy allows" at AWS, which is a policy-level rejection (our code is fine).
 
 **Scope:** The main output — call the new 2025 API and get a JWT.
 

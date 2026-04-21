@@ -45,6 +45,7 @@
 #define CJSON_HIDE_SYMBOLS
 #include "cJSON.h"
 #include "rdhttp.h"
+#include "rdkafka_aws_sts.h"
 #endif
 
 
@@ -335,8 +336,7 @@ static int64_t rd_aws_ymd_hms_to_epoch(int year,
  *
  * @returns rd_true on success with \p *epoch_seconds set, else rd_false.
  */
-static rd_bool_t rd_aws_parse_iso8601_utc(const char *iso,
-                                          int64_t *epoch_seconds) {
+rd_bool_t rd_aws_parse_iso8601_utc(const char *iso, int64_t *epoch_seconds) {
         int year, mon, day, hour, min, sec;
         int tz_hour = 0, tz_min = 0, tz_sign = 1;
         int n = 0;
@@ -402,7 +402,7 @@ static rd_bool_t rd_aws_parse_iso8601_utc(const char *iso,
  *
  * @returns 0 if \p exp_epoch is in the past, else the monotonic us value.
  */
-static rd_ts_t rd_aws_epoch_to_monotonic_us(int64_t exp_epoch) {
+rd_ts_t rd_aws_epoch_to_monotonic_us(int64_t exp_epoch) {
         int64_t now_epoch = (int64_t)time(NULL);
         int64_t seconds_until;
 
@@ -1215,13 +1215,35 @@ static int ut_iso8601(void) {
 #ifndef _WIN32
 
 #include <sys/socket.h>
+#include <sys/select.h>
+#include <sys/time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <errno.h>
+#include <signal.h>
 
 #define UT_MOCK_MAX_ROUTES       16
 #define UT_MOCK_REQUEST_BUF_SIZE 8192
+
+/* MSG_NOSIGNAL is Linux-specific; fall back to 0 elsewhere (macOS uses
+ * SO_NOSIGPIPE setsockopt instead; see ut_mock_handle_request). */
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+
+/* Debug tracing gated on RD_UT_MOCK_DEBUG=1 env var. */
+static rd_bool_t ut_mock_debug_enabled = rd_false;
+
+#define UT_MOCK_LOG(...)                                                       \
+        do {                                                                   \
+                if (ut_mock_debug_enabled) {                                   \
+                        fprintf(stderr, "[mock] ");                            \
+                        fprintf(stderr, __VA_ARGS__);                          \
+                        fputc('\n', stderr);                                   \
+                        fflush(stderr);                                        \
+                }                                                              \
+        } while (0)
 
 typedef struct ut_mock_route_s {
         const char *method; /* not owned */
@@ -1242,20 +1264,25 @@ typedef struct ut_mock_server_s {
 } ut_mock_server_t;
 
 /**
- * @brief Read request bytes until we see the end-of-headers delimiter.
+ * @brief Read request bytes until we see the end-of-headers delimiter or
+ *        recv times out (SO_RCVTIMEO is set on accepted sockets).
  */
 static int ut_mock_read_headers(int fd, char *buf, size_t bufsz) {
         ssize_t total = 0;
         ssize_t n;
         while ((size_t)total < bufsz - 1) {
                 n = recv(fd, buf + total, bufsz - 1 - total, 0);
-                if (n <= 0)
+                if (n <= 0) {
+                        UT_MOCK_LOG("recv returned %zd errno=%d (%s)", n, errno,
+                                    strerror(errno));
                         return -1;
+                }
                 total += n;
                 buf[total] = '\0';
                 if (strstr(buf, "\r\n\r\n"))
                         return (int)total;
         }
+        UT_MOCK_LOG("recv buffer filled without \\r\\n\\r\\n");
         return -1; /* headers exceed buffer — treat as error */
 }
 
@@ -1265,12 +1292,36 @@ static void ut_mock_handle_request(int client_fd, ut_mock_server_t *s) {
         char resp[4096];
         int i, resplen;
         const ut_mock_route_t *route = NULL;
+        ssize_t sent;
 
-        if (ut_mock_read_headers(client_fd, reqbuf, sizeof(reqbuf)) < 0)
-                return;
+        /* 2-second recv timeout so a client that connects but never sends
+         * the request line doesn't wedge the mock thread. */
+        {
+                struct timeval tv;
+                tv.tv_sec  = 2;
+                tv.tv_usec = 0;
+                setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO,
+                           (const char *)&tv, sizeof(tv));
+        }
+#ifdef SO_NOSIGPIPE
+        {
+                int on = 1;
+                setsockopt(client_fd, SOL_SOCKET, SO_NOSIGPIPE, &on,
+                           sizeof(on));
+        }
+#endif
 
-        if (sscanf(reqbuf, "%15s %511s ", method, path) != 2)
+        if (ut_mock_read_headers(client_fd, reqbuf, sizeof(reqbuf)) < 0) {
+                UT_MOCK_LOG("read_headers failed on fd %d", client_fd);
                 return;
+        }
+
+        if (sscanf(reqbuf, "%15s %511s ", method, path) != 2) {
+                UT_MOCK_LOG("failed to parse request line");
+                return;
+        }
+
+        UT_MOCK_LOG("request: %s %s", method, path);
 
         for (i = 0; i < s->n_routes; i++) {
                 if (!strcmp(s->routes[i].method, method) &&
@@ -1281,6 +1332,8 @@ static void ut_mock_handle_request(int client_fd, ut_mock_server_t *s) {
         }
 
         if (route) {
+                UT_MOCK_LOG("matched route #%d status=%d body_len=%" PRIusz, i,
+                            route->status, route->body_len);
                 resplen = rd_snprintf(resp, sizeof(resp),
                                       "HTTP/1.1 %d OK\r\n"
                                       "Content-Type: %s\r\n"
@@ -1292,36 +1345,71 @@ static void ut_mock_handle_request(int client_fd, ut_mock_server_t *s) {
                                       route->content_type ? route->content_type
                                                           : "text/plain",
                                       route->body_len);
-                send(client_fd, resp, (size_t)resplen, 0);
-                if (route->body && route->body_len > 0)
-                        send(client_fd, route->body, route->body_len, 0);
+                sent    = send(client_fd, resp, (size_t)resplen, MSG_NOSIGNAL);
+                UT_MOCK_LOG("sent headers: %zd bytes", sent);
+                if (route->body && route->body_len > 0) {
+                        sent = send(client_fd, route->body, route->body_len,
+                                    MSG_NOSIGNAL);
+                        UT_MOCK_LOG("sent body: %zd bytes", sent);
+                }
         } else {
+                UT_MOCK_LOG("no route matched %s %s -> 404", method, path);
                 resplen = rd_snprintf(resp, sizeof(resp),
                                       "HTTP/1.1 404 Not Found\r\n"
                                       "Content-Length: 0\r\n"
                                       "Connection: close\r\n"
                                       "\r\n");
-                send(client_fd, resp, (size_t)resplen, 0);
+                send(client_fd, resp, (size_t)resplen, MSG_NOSIGNAL);
         }
 }
 
 static int ut_mock_server_thread(void *arg) {
         ut_mock_server_t *s = arg;
+        UT_MOCK_LOG("thread started, listen_fd=%d port=%d", s->listen_fd,
+                    s->port);
         while (!s->stop) {
+                fd_set rfds;
+                struct timeval tv;
+                int selret;
                 struct sockaddr_in caddr;
                 socklen_t clen = sizeof(caddr);
-                int client_fd =
-                    accept(s->listen_fd, (struct sockaddr *)&caddr, &clen);
-                if (client_fd < 0) {
-                        /* Listen socket was closed to unblock accept()
-                         * during destroy, or we were interrupted. */
+                int client_fd;
+
+                /* select() with 500ms timeout so the stop flag is checked
+                 * periodically regardless of whether accept() is blocked. */
+                FD_ZERO(&rfds);
+                FD_SET(s->listen_fd, &rfds);
+                tv.tv_sec  = 0;
+                tv.tv_usec = 500000;
+
+                selret = select(s->listen_fd + 1, &rfds, NULL, NULL, &tv);
+                if (selret < 0) {
                         if (s->stop || errno == EBADF || errno == EINVAL)
                                 break;
+                        if (errno == EINTR)
+                                continue;
+                        UT_MOCK_LOG("select errno=%d (%s)", errno,
+                                    strerror(errno));
+                        break;
+                }
+                if (selret == 0) /* timeout, re-check stop */
+                        continue;
+
+                client_fd =
+                    accept(s->listen_fd, (struct sockaddr *)&caddr, &clen);
+                if (client_fd < 0) {
+                        if (s->stop || errno == EBADF || errno == EINVAL)
+                                break;
+                        UT_MOCK_LOG("accept errno=%d (%s)", errno,
+                                    strerror(errno));
                         continue;
                 }
+                UT_MOCK_LOG("accepted fd=%d", client_fd);
                 ut_mock_handle_request(client_fd, s);
                 close(client_fd);
+                UT_MOCK_LOG("closed fd=%d", client_fd);
         }
+        UT_MOCK_LOG("thread exiting");
         return 0;
 }
 
@@ -1653,11 +1741,370 @@ static int ut_imds_malformed_json(void) {
         RD_UT_PASS();
 }
 
+/*
+ * ============================================================
+ * GetWebIdentityToken STS — unit tests (Milestone 7)
+ * ============================================================
+ */
+
+/* Canned GetWebIdentityToken success response body (shape confirmed live
+ * in Probe B against real STS, Nov-2025 API). */
+#define UT_STS_MOCK_JWT                                                        \
+        "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.MOCK_JWT_PAYLOAD.MOCK_SIG"
+#define UT_STS_MOCK_SUCCESS_XML                                                \
+        "<GetWebIdentityTokenResponse "                                        \
+        "xmlns=\"https://sts.amazonaws.com/doc/2011-06-15/\">"                 \
+        "<GetWebIdentityTokenResult>"                                          \
+        "<WebIdentityToken>" UT_STS_MOCK_JWT                                   \
+        "</WebIdentityToken>"                                                  \
+        "<Expiration>2099-01-01T00:00:00Z</Expiration>"                        \
+        "</GetWebIdentityTokenResult>"                                         \
+        "<ResponseMetadata>"                                                   \
+        "<RequestId>mock-request-id</RequestId>"                               \
+        "</ResponseMetadata>"                                                  \
+        "</GetWebIdentityTokenResponse>"
+
+#define UT_STS_MOCK_ACCESS_DENIED_XML                                          \
+        "<ErrorResponse "                                                      \
+        "xmlns=\"https://sts.amazonaws.com/doc/2011-06-15/\">"                 \
+        "<Error>"                                                              \
+        "<Type>Sender</Type>"                                                  \
+        "<Code>AccessDenied</Code>"                                            \
+        "<Message>Mock access denied: role lacks "                             \
+        "sts:GetWebIdentityToken</Message>"                                    \
+        "</Error>"                                                             \
+        "<RequestId>mock-request-id</RequestId>"                               \
+        "</ErrorResponse>"
+
+/**
+ * @brief Mock STS happy path: request lands on our mock server, canned
+ *        success XML comes back, parser extracts JWT and Expiration.
+ */
+static int ut_sts_mock_happy_path(void) {
+        ut_mock_server_t *s;
+        rd_kafka_t *rk;
+        rd_kafka_aws_credentials_t *creds;
+        rd_kafka_aws_sts_jwt_t *jwt = NULL;
+        char url[128];
+        char errstr[512] = {0};
+        rd_kafka_resp_err_t err;
+
+        RD_UT_BEGIN();
+
+        s = ut_mock_server_new();
+        RD_UT_ASSERT(s != NULL, "mock server new failed");
+        ut_mock_server_add(s, "POST", "/", 200, "text/xml",
+                           UT_STS_MOCK_SUCCESS_XML);
+
+        rd_snprintf(url, sizeof(url), "http://127.0.0.1:%d/", s->port);
+        RD_UT_SETENV("AWS_STS_ENDPOINT_URL", url);
+
+        rk    = ut_fake_rk();
+        creds = rd_kafka_aws_credentials_new(
+            "AKIA_MOCK_AKID", "MOCK_SECRET_ACCESS_KEY_40_CHARS_LONG___",
+            "MOCK_SESSION_TOKEN_SIMULATED_TEMP_CREDS", 0);
+
+        err = rd_kafka_aws_sts_get_web_identity_token(
+            rk, "us-east-1", "https://librdkafka-mock.example.com", "RS256",
+            300, creds, &jwt, errstr, sizeof(errstr));
+
+        RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                     "expected NO_ERROR, got %d (errstr=%s)", err, errstr);
+        RD_UT_ASSERT(jwt != NULL, "jwt NULL");
+        RD_UT_ASSERT(jwt->token && !strcmp(jwt->token, UT_STS_MOCK_JWT),
+                     "token mismatch: got %s",
+                     jwt->token ? jwt->token : "(null)");
+        RD_UT_ASSERT(jwt->expiration_us > 0,
+                     "expiration_us should be set for 2099 expiry");
+
+        rd_kafka_aws_sts_jwt_destroy(jwt);
+        rd_kafka_aws_credentials_destroy(creds);
+        ut_fake_rk_destroy(rk);
+        ut_mock_server_destroy(s);
+        RD_UT_UNSETENV("AWS_STS_ENDPOINT_URL");
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Mock STS error: server returns HTTP 400 with an STS-style
+ *        <ErrorResponse>; caller gets AUTHENTICATION error and the
+ *        Code+Message surfaced in errstr.
+ */
+static int ut_sts_mock_error_access_denied(void) {
+        ut_mock_server_t *s;
+        rd_kafka_t *rk;
+        rd_kafka_aws_credentials_t *creds;
+        rd_kafka_aws_sts_jwt_t *jwt = NULL;
+        char url[128];
+        char errstr[512] = {0};
+        rd_kafka_resp_err_t err;
+
+        RD_UT_BEGIN();
+
+        s = ut_mock_server_new();
+        RD_UT_ASSERT(s != NULL, "mock server new failed");
+        ut_mock_server_add(s, "POST", "/", 400, "text/xml",
+                           UT_STS_MOCK_ACCESS_DENIED_XML);
+
+        rd_snprintf(url, sizeof(url), "http://127.0.0.1:%d/", s->port);
+        RD_UT_SETENV("AWS_STS_ENDPOINT_URL", url);
+
+        rk    = ut_fake_rk();
+        creds = rd_kafka_aws_credentials_new("AKIA_MOCK", "SECRET_MOCK",
+                                             "TOKEN_MOCK", 0);
+
+        err = rd_kafka_aws_sts_get_web_identity_token(
+            rk, "us-east-1", "https://librdkafka-mock.example.com", "RS256",
+            300, creds, &jwt, errstr, sizeof(errstr));
+
+        RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR__AUTHENTICATION,
+                     "expected AUTHENTICATION, got %d (errstr=%s)", err,
+                     errstr);
+        RD_UT_ASSERT(jwt == NULL, "jwt must be NULL on error");
+        RD_UT_ASSERT(strstr(errstr, "AccessDenied") != NULL,
+                     "errstr should surface STS Code. Got: %s", errstr);
+        RD_UT_ASSERT(strstr(errstr, "Mock access denied") != NULL,
+                     "errstr should surface STS Message. Got: %s", errstr);
+
+        rd_kafka_aws_credentials_destroy(creds);
+        ut_fake_rk_destroy(rk);
+        ut_mock_server_destroy(s);
+        RD_UT_UNSETENV("AWS_STS_ENDPOINT_URL");
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Invalid-argument guard: reject zero/out-of-range DurationSeconds
+ *        without touching the network.
+ */
+static int ut_sts_invalid_args(void) {
+        rd_kafka_t *rk;
+        rd_kafka_aws_credentials_t *creds;
+        rd_kafka_aws_sts_jwt_t *jwt = NULL;
+        char errstr[512]            = {0};
+        rd_kafka_resp_err_t err;
+
+        RD_UT_BEGIN();
+        rk    = ut_fake_rk();
+        creds = rd_kafka_aws_credentials_new("AK", "SK", NULL, 0);
+
+        /* DurationSeconds out of [60, 3600]. */
+        err = rd_kafka_aws_sts_get_web_identity_token(rk, "us-east-1", "aud",
+                                                      "RS256", 10, creds, &jwt,
+                                                      errstr, sizeof(errstr));
+        RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                     "duration=10 should be INVALID_ARG, got %d", err);
+
+        /* NULL region. */
+        err = rd_kafka_aws_sts_get_web_identity_token(
+            rk, NULL, "aud", "RS256", 300, creds, &jwt, errstr, sizeof(errstr));
+        RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                     "NULL region should be INVALID_ARG, got %d", err);
+
+        rd_kafka_aws_credentials_destroy(creds);
+        ut_fake_rk_destroy(rk);
+        RD_UT_PASS();
+}
+
+/**
+ * @brief End-to-end integration test against REAL STS on a real EC2 instance.
+ *        Gated on RD_UT_STS=1. Uses the IMDSv2 provider to fetch real
+ *        credentials, then calls sts:GetWebIdentityToken and verifies a
+ *        valid JWT comes back.
+ *
+ * Required preconditions on the instance:
+ *   - Attached IAM role with sts:GetWebIdentityToken permission (Probe B
+ *     already validated this on ktrue-iam-sts-test-role).
+ *   - Account has outbound federation enabled.
+ *   - RD_UT_AWS_REGION env var set (e.g. eu-north-1). No default — we
+ *     refuse to guess.
+ */
+static int ut_sts_real(void) {
+        const char *flag     = rd_getenv("RD_UT_STS", NULL);
+        const char *region   = rd_getenv("RD_UT_AWS_REGION", NULL);
+        const char *audience = rd_getenv("RD_UT_AWS_AUDIENCE", NULL);
+        rd_kafka_t *rk;
+        rd_kafka_aws_creds_provider_t *p;
+        rd_kafka_aws_credentials_t *creds = NULL;
+        rd_kafka_aws_sts_jwt_t *jwt       = NULL;
+        rd_kafka_aws_creds_result_t cr;
+        rd_kafka_resp_err_t err;
+        char errstr[1024] = {0};
+        rd_ts_t now_us;
+        long long seconds_until_exp;
+
+        if (!flag || strcmp(flag, "1") != 0)
+                RD_UT_SKIP(
+                    "RD_UT_STS=1 not set; skipping real GetWebIdentityToken "
+                    "integration test");
+        if (!region || !*region)
+                RD_UT_SKIP(
+                    "RD_UT_AWS_REGION not set; skipping real STS test "
+                    "(librdkafka requires explicit region)");
+
+        /* The IAM policy attached to the caller's role may restrict the
+         * allowed audience via the sts:IdentityTokenAudience condition.
+         * Default to the audience the AWS CLI smoke-test uses; override
+         * via RD_UT_AWS_AUDIENCE if your policy expects a different one. */
+        if (!audience || !*audience)
+                audience = "https://api.example.com";
+
+        RD_UT_BEGIN();
+        RD_UT_SAY("real STS test: region=%s audience=%s", region, audience);
+
+        /* Ensure we hit real STS, not any mock endpoint leaked from a
+         * previous test. */
+        RD_UT_UNSETENV("AWS_STS_ENDPOINT_URL");
+        RD_UT_UNSETENV("AWS_EC2_METADATA_DISABLED");
+        RD_UT_UNSETENV("AWS_EC2_METADATA_SERVICE_ENDPOINT");
+
+        rk = ut_fake_rk();
+
+        /* 1. Fetch real AWS creds from IMDSv2. */
+        p  = rd_kafka_aws_creds_provider_imds_new(rk);
+        cr = rd_kafka_aws_creds_provider_resolve(p, &creds, errstr,
+                                                 sizeof(errstr));
+        RD_UT_ASSERT(cr == RD_KAFKA_AWS_CREDS_OK,
+                     "IMDSv2 did not return creds (expected OK, got %d, "
+                     "errstr=%s)",
+                     cr, errstr);
+        rd_kafka_aws_creds_provider_destroy(p);
+
+        /* 2. Call real STS. */
+        err = rd_kafka_aws_sts_get_web_identity_token(rk, region, audience,
+                                                      "RS256", 300, creds, &jwt,
+                                                      errstr, sizeof(errstr));
+        RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                     "expected NO_ERROR from real STS, got %d (errstr=%s)", err,
+                     errstr);
+        RD_UT_ASSERT(jwt != NULL, "jwt NULL");
+        RD_UT_ASSERT(jwt->token && strlen(jwt->token) > 100,
+                     "JWT unexpectedly short (got %zu bytes)",
+                     jwt->token ? strlen(jwt->token) : (size_t)0);
+        /* JWTs are three base64url sections separated by dots. */
+        {
+                const char *first_dot = strchr(jwt->token, '.');
+                const char *second_dot =
+                    first_dot ? strchr(first_dot + 1, '.') : NULL;
+                RD_UT_ASSERT(first_dot && second_dot &&
+                                 strchr(second_dot + 1, '.') == NULL,
+                             "JWT doesn't have the expected three-segment "
+                             "header.payload.signature shape");
+        }
+
+        now_us = rd_clock();
+        RD_UT_ASSERT(jwt->expiration_us > now_us,
+                     "JWT expiration is in the past");
+        seconds_until_exp =
+            (long long)((jwt->expiration_us - now_us) / 1000000);
+
+        RD_UT_SAY(
+            "STS GetWebIdentityToken success: JWT=%zu bytes, "
+            "header prefix=\"%.10s\", expires in %lld seconds",
+            strlen(jwt->token), jwt->token, seconds_until_exp);
+
+        rd_kafka_aws_sts_jwt_destroy(jwt);
+        rd_kafka_aws_credentials_destroy(creds);
+        ut_fake_rk_destroy(rk);
+
+        RD_UT_PASS();
+}
+
 #endif /* !_WIN32 (mock server uses POSIX sockets) */
+
+
+/**
+ * @brief Integration test: resolve credentials from REAL IMDSv2 at
+ *        169.254.169.254. Gated on RD_UT_IMDS=1 because it requires
+ *        the link-local endpoint to be reachable (i.e., running on EC2).
+ *
+ * If the env var is set but IMDS is unreachable or the instance has no
+ * attached role, the test fails — that's intentional, since setting the
+ * opt-in flag means "I expect IMDS here."
+ */
+static int ut_imds_real(void) {
+        const char *flag = rd_getenv("RD_UT_IMDS", NULL);
+        rd_kafka_t *rk;
+        rd_kafka_aws_creds_provider_t *p;
+        rd_kafka_aws_credentials_t *creds = NULL;
+        char errstr[512]                  = {0};
+        rd_kafka_aws_creds_result_t r;
+        rd_ts_t now_us;
+        long long seconds_until_exp;
+
+        if (!flag || strcmp(flag, "1") != 0)
+                RD_UT_SKIP(
+                    "RD_UT_IMDS=1 not set; skipping real IMDSv2 integration "
+                    "test (requires EC2 instance with attached IAM role)");
+
+        RD_UT_BEGIN();
+
+        /* Clear any overrides that previous mock tests may have left behind
+         * so we talk to the real 169.254.169.254 endpoint. */
+        RD_UT_UNSETENV("AWS_EC2_METADATA_DISABLED");
+        RD_UT_UNSETENV("AWS_EC2_METADATA_SERVICE_ENDPOINT");
+
+        rk = ut_fake_rk();
+        p  = rd_kafka_aws_creds_provider_imds_new(rk);
+        r  = rd_kafka_aws_creds_provider_resolve(p, &creds, errstr,
+                                                 sizeof(errstr));
+
+        RD_UT_ASSERT(r == RD_KAFKA_AWS_CREDS_OK,
+                     "expected OK from real IMDSv2, got %d (errstr=%s). "
+                     "Ensure this EC2 instance has an attached IAM role.",
+                     r, errstr);
+        RD_UT_ASSERT(creds != NULL, "creds NULL");
+        RD_UT_ASSERT(creds->access_key_id && strlen(creds->access_key_id) >= 16,
+                     "AKID looks bogus: %s",
+                     creds->access_key_id ? creds->access_key_id : "(null)");
+        RD_UT_ASSERT(creds->secret_access_key &&
+                         strlen(creds->secret_access_key) >= 30,
+                     "secret key unexpectedly short");
+        RD_UT_ASSERT(
+            creds->session_token && strlen(creds->session_token) >= 100,
+            "session token unexpectedly short (got %zu bytes)",
+            creds->session_token ? strlen(creds->session_token) : (size_t)0);
+        RD_UT_ASSERT(creds->expiration_us > 0, "expiration_us not set");
+
+        now_us = rd_clock();
+        RD_UT_ASSERT(creds->expiration_us > now_us,
+                     "expiration_us is already in the past");
+        seconds_until_exp =
+            (long long)((creds->expiration_us - now_us) / 1000000);
+
+        RD_UT_SAY(
+            "IMDSv2 resolved real credentials: "
+            "AKID prefix=%.4s***, session_token=%zu bytes, "
+            "expires in %lld seconds",
+            creds->access_key_id, strlen(creds->session_token),
+            seconds_until_exp);
+
+        rd_kafka_aws_credentials_destroy(creds);
+        rd_kafka_aws_creds_provider_destroy(p);
+        ut_fake_rk_destroy(rk);
+
+        RD_UT_PASS();
+}
 
 
 int unittest_aws_credentials(void) {
         int fails = 0;
+
+#ifndef _WIN32
+        /* Enable verbose mock-server tracing if requested. */
+        {
+                const char *dbg = rd_getenv("RD_UT_MOCK_DEBUG", NULL);
+                if (dbg && (!strcmp(dbg, "1") || !rd_strcasecmp(dbg, "true")))
+                        ut_mock_debug_enabled = rd_true;
+        }
+        /* Ignore SIGPIPE process-wide so a broken mock-client write (e.g.
+         * client closed before server's send completes) doesn't kill the
+         * test runner. Redundant with MSG_NOSIGNAL / SO_NOSIGPIPE but
+         * belt-and-suspenders. */
+        signal(SIGPIPE, SIG_IGN);
+#endif
 
         fails += ut_credentials_lifecycle();
         fails += ut_credentials_expired();
@@ -1670,6 +2117,12 @@ int unittest_aws_credentials(void) {
         fails += ut_imds_no_role();
         fails += ut_imds_malformed_json();
         fails += ut_imds_happy_path();
+        fails += ut_imds_real(); /* skips unless RD_UT_IMDS=1 */
+        fails += ut_sts_invalid_args();
+        fails += ut_sts_mock_happy_path();
+        fails += ut_sts_mock_error_access_denied();
+        fails +=
+            ut_sts_real(); /* skips unless RD_UT_STS=1 + RD_UT_AWS_REGION */
 #endif
 
         return fails;
