@@ -84,7 +84,7 @@ if(WITH_SSL)
 endif()
 
 if(WITH_CURL)
- list(APPEND sources rdhttp.c)
+ list(APPEND sources rdhttp.c rdkafka_aws_credentials.c)
 endif()
 
 if(WITH_HDRHISTOGRAM)

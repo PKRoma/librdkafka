@@ -480,6 +480,115 @@ done:
 
 
 /**
+ * @brief HTTP PUT with optional request body and custom headers.
+ *
+ * See docstring in rdhttp.h. Mirrors rd_http_get()'s retry/backoff/error
+ * handling; the only differences are the verb and the optional body.
+ *
+ * @locality Any thread.
+ * @locks None.
+ */
+rd_http_error_t *rd_http_put(rd_kafka_t *rk,
+                             const char *url,
+                             char **headers_array,
+                             size_t headers_array_cnt,
+                             const char *data,
+                             size_t data_size,
+                             int timeout_s,
+                             int retries,
+                             int retry_ms,
+                             rd_buf_t **rbufp,
+                             char **content_type,
+                             int *response_code) {
+        rd_http_req_t hreq;
+        rd_http_error_t *herr      = NULL;
+        struct curl_slist *headers = NULL;
+        char *header;
+        int i;
+        size_t len, j;
+
+        *rbufp = NULL;
+        if (content_type)
+                *content_type = NULL;
+        if (response_code)
+                *response_code = -1;
+
+        herr = rd_http_req_init(rk, &hreq, url);
+        if (unlikely(herr != NULL))
+                return herr;
+
+        for (j = 0; j < headers_array_cnt; j++) {
+                header = headers_array[j];
+                if (header && *header)
+                        headers = curl_slist_append(headers, header);
+        }
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_HTTPHEADER, headers);
+        if (timeout_s > 0)
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT, timeout_s);
+
+        /* CUSTOMREQUEST after POSTFIELDS so the verb is "PUT" regardless of
+         * whether a body is attached. POSTFIELDSIZE is explicit so a zero-byte
+         * body sends Content-Length: 0 rather than chunked. */
+        if (data && data_size > 0) {
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDSIZE,
+                                 (long)data_size);
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDS, data);
+        } else {
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDSIZE, 0L);
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDS, "");
+        }
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_CUSTOMREQUEST, "PUT");
+
+        for (i = 0; i <= retries; i++) {
+                if (rd_kafka_terminating(rk)) {
+                        herr = rd_http_error_new(-1, "Terminating");
+                        goto done;
+                }
+
+                herr = rd_http_req_perform_sync(&hreq);
+                len  = rd_buf_len(hreq.hreq_buf);
+
+                if (!herr) {
+                        if (len > 0)
+                                break; /* Success with body */
+                        /* Empty-body 2xx is acceptable for PUT; return
+                         * success with an empty rbuf so the caller can
+                         * distinguish from error cases. */
+                        break;
+                }
+
+                /* Retry if HTTP(S) request returns temporary error and there
+                 * are remaining retries, else fail. */
+                if (i == retries || !rd_http_is_failure_temporary(herr->code))
+                        goto done;
+
+                /* Retry */
+                rd_http_error_destroy(herr);
+                herr = NULL;
+                rd_usleep(retry_ms * 1000 * (i + 1), &rk->rk_terminate);
+        }
+
+        *rbufp        = hreq.hreq_buf;
+        hreq.hreq_buf = NULL;
+
+        if (content_type) {
+                const char *ct = rd_http_req_get_content_type(&hreq);
+                if (ct && *ct)
+                        *content_type = rd_strdup(ct);
+                else
+                        *content_type = NULL;
+        }
+        if (response_code)
+                *response_code = hreq.hreq_code;
+
+done:
+        RD_IF_FREE(headers, curl_slist_free_all);
+        rd_http_req_destroy(&hreq);
+        return herr;
+}
+
+
+/**
  * @brief Extract the JSON object from \p hreq and return it in \p *jsonp.
  *
  * @returns Returns NULL on success, or an JSON parsing error - this
@@ -820,11 +929,68 @@ int unittest_http_get_params_append(void) {
  * and 4xx response on $RD_UT_HTTP_URL/error (with whatever type of body).
  */
 
+/**
+ * @brief Unittest for rd_http_put() against IMDSv2 (EC2 only).
+ *
+ * Gated on RD_UT_IMDS=1 because it requires the IMDS endpoint at
+ * 169.254.169.254 to be reachable — i.e., running on an EC2 instance.
+ * The full PUT-path coverage via an in-process mock HTTP server comes
+ * with milestone M3 of the AWS OAUTHBEARER work.
+ *
+ * If the env var is set but IMDS is unreachable, the test fails — that's
+ * intentional, since the opt-in indicates "I expect IMDS here."
+ */
+int unittest_http_put(void) {
+        const char *flag = rd_getenv("RD_UT_IMDS", NULL);
+        rd_kafka_t *rk;
+        rd_http_error_t *herr;
+        rd_buf_t *rbuf = NULL;
+        int code       = -1;
+        size_t token_len;
+        char *headers[1] = {
+            (char *)"X-aws-ec2-metadata-token-ttl-seconds: 60",
+        };
+
+        if (!flag || strcmp(flag, "1") != 0)
+                RD_UT_SKIP(
+                    "RD_UT_IMDS=1 not set; skipping IMDSv2 PUT integration "
+                    "test (requires EC2 instance)");
+
+        RD_UT_BEGIN();
+
+        rk = rd_calloc(1, sizeof(*rk));
+
+        herr = rd_http_put(rk, "http://169.254.169.254/latest/api/token",
+                           headers, 1, NULL, 0, /* no body */
+                           5,                   /* 5s timeout */
+                           0, 0,                /* no retries */
+                           &rbuf, NULL, &code);
+
+        RD_UT_ASSERT(!herr, "Expected success, got: %s",
+                     herr ? herr->errstr : "(n/a)");
+        RD_UT_ASSERT(code == 200, "Expected HTTP 200, got %d", code);
+        RD_UT_ASSERT(rbuf != NULL, "Expected response buffer");
+        token_len = rd_buf_len(rbuf);
+        RD_UT_ASSERT(token_len > 0,
+                     "Expected non-empty IMDSv2 session token, got %" PRIusz
+                     " bytes",
+                     token_len);
+
+        RD_UT_SAY("IMDSv2 PUT returned %" PRIusz "-byte session token",
+                  token_len);
+
+        RD_IF_FREE(rbuf, rd_buf_destroy_free);
+        rd_free(rk);
+
+        RD_UT_PASS();
+}
+
 int unittest_http(void) {
         int fails = 0;
 
         fails += unittest_http_get();
         fails += unittest_http_get_params_append();
+        fails += unittest_http_put();
 
         return fails;
 }

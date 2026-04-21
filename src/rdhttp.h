@@ -62,6 +62,33 @@ rd_http_error_t *rd_http_get_json(rd_kafka_t *rk,
                                   int retry_ms,
                                   cJSON **jsonp);
 
+/**
+ * @brief HTTP PUT with optional request body and custom headers.
+ *
+ * Added for IMDSv2, which requires PUT /latest/api/token with
+ * an X-aws-ec2-metadata-token-ttl-seconds header and no body, but the
+ * shape is generic enough for other AWS endpoints that need PUT.
+ *
+ * Same argument semantics as rd_http_get(), plus:
+ * @param data      Request body (may be NULL for a bodyless PUT).
+ * @param data_size Size of \p data in bytes (0 for bodyless PUT).
+ *
+ * @returns NULL on success (HTTP < 400) or an error object that the caller
+ *          must destroy with rd_http_error_destroy().
+ */
+rd_http_error_t *rd_http_put(rd_kafka_t *rk,
+                             const char *url,
+                             char **headers_array,
+                             size_t headers_array_cnt,
+                             const char *data,
+                             size_t data_size,
+                             int timeout_s,
+                             int retries,
+                             int retry_ms,
+                             rd_buf_t **rbufp,
+                             char **content_type,
+                             int *response_code);
+
 void rd_http_global_init(void);
 
 

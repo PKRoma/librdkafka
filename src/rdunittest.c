@@ -425,6 +425,7 @@ extern int unittest_assignors(void);
 extern int unittest_map(void);
 #if WITH_CURL
 extern int unittest_http(void);
+extern int unittest_aws_credentials(void);
 #endif
 #if WITH_OAUTHBEARER_OIDC
 extern int unittest_sasl_oauthbearer_oidc(void);
@@ -473,6 +474,7 @@ int rd_unittest(void) {
             {"assignors", unittest_assignors},
 #if WITH_CURL
             {"http", unittest_http},
+            {"aws_credentials", unittest_aws_credentials},
 #endif
 #if WITH_OAUTHBEARER_OIDC
             {"sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc},
