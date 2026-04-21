@@ -101,4 +101,47 @@ rd_kafka_aws_sts_get_web_identity_token(rd_kafka_t *rk,
                                         size_t errstr_size);
 
 
+/**
+ * @brief Call STS `AssumeRoleWithWebIdentity` — unauthenticated.
+ *
+ * Exchanges a web-identity JWT (e.g., an EKS IRSA projected service-account
+ * token) for AWS temporary credentials. This is the inverse of
+ * GetWebIdentityToken: here AWS is the relying party that verifies an
+ * externally-issued JWT against a configured OIDC trust and returns AWS
+ * credentials.
+ *
+ * **Unauthenticated**: no SigV4 signature, no Authorization header. The JWT
+ * itself is the caller's proof of identity. Confirmed on the wire in Probe
+ * C (`auth_type: none`).
+ *
+ * @param rk                 may be NULL for tests.
+ * @param region             AWS region (e.g. "eu-north-1"). Required —
+ *                           librdkafka never auto-defaults.
+ * @param role_arn           IAM role ARN to assume (AWS_ROLE_ARN).
+ * @param role_session_name  Required tag for this session; callers typically
+ *                           generate e.g. "librdkafka-<timestamp>".
+ * @param web_identity_token The JWT (whitespace already stripped by caller
+ *                           if read from a file).
+ * @param credsp             Out: newly allocated credentials on success.
+ * @param errstr             Populated on error.
+ * @param errstr_size        Size of errstr buffer.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success. On error:
+ *           - RD_KAFKA_RESP_ERR__AUTHENTICATION for STS rejections
+ *             (InvalidIdentityToken, ExpiredToken, AccessDenied, ...).
+ *           - RD_KAFKA_RESP_ERR__TRANSPORT on network error.
+ *           - RD_KAFKA_RESP_ERR__BAD_MSG on unparseable response.
+ *           - RD_KAFKA_RESP_ERR__INVALID_ARG on bad inputs.
+ */
+rd_kafka_resp_err_t rd_kafka_aws_sts_assume_role_with_web_identity(
+    rd_kafka_t *rk,
+    const char *region,
+    const char *role_arn,
+    const char *role_session_name,
+    const char *web_identity_token,
+    rd_kafka_aws_credentials_t **credsp,
+    char *errstr,
+    size_t errstr_size);
+
+
 #endif /* _RDKAFKA_AWS_STS_H_ */

@@ -436,3 +436,189 @@ cleanup:
         rd_http_req_destroy(&hreq);
         return result;
 }
+
+
+/*
+ * ============================================================
+ * AssumeRoleWithWebIdentity
+ * ============================================================
+ *
+ * Unauthenticated variant: no SigV4 signing, no Authorization header.
+ * The web-identity token itself is the caller's proof of identity.
+ *
+ * Response body shape (live-confirmed in Probe C):
+ *
+ *   <AssumeRoleWithWebIdentityResponse ...>
+ *     <AssumeRoleWithWebIdentityResult>
+ *       <Credentials>
+ *         <AccessKeyId>ASIA...</AccessKeyId>
+ *         <SecretAccessKey>...</SecretAccessKey>
+ *         <SessionToken>...</SessionToken>        ← note: NOT "Token"
+ *         <Expiration>2026-04-21T...Z</Expiration>
+ *       </Credentials>
+ *       ... (SubjectFromWebIdentityToken, AssumedRoleUser, etc.) ...
+ *     </AssumeRoleWithWebIdentityResult>
+ *   </AssumeRoleWithWebIdentityResponse>
+ *
+ * Each tag we care about appears exactly once, so rd_aws_xml_extract()
+ * works fine. Field names differ from the IMDS/ECS JSON shape
+ * (SessionToken vs Token), so we extract and construct credentials
+ * directly rather than reusing aws_creds_parse_json_response().
+ */
+
+rd_kafka_resp_err_t rd_kafka_aws_sts_assume_role_with_web_identity(
+    rd_kafka_t *rk,
+    const char *region,
+    const char *role_arn,
+    const char *role_session_name,
+    const char *web_identity_token,
+    rd_kafka_aws_credentials_t **credsp,
+    char *errstr,
+    size_t errstr_size) {
+        rd_http_req_t hreq;
+        rd_http_error_t *herr      = NULL;
+        struct curl_slist *headers = NULL;
+        char *url                  = NULL;
+        char *body                 = NULL;
+        char *xml_body             = NULL;
+        char *escaped_role_arn     = NULL;
+        char *escaped_session_name = NULL;
+        char *escaped_token        = NULL;
+        char *akid                 = NULL;
+        char *secret               = NULL;
+        char *session              = NULL;
+        char *expiration_str       = NULL;
+        rd_kafka_resp_err_t result = RD_KAFKA_RESP_ERR__FAIL;
+        int64_t exp_epoch          = 0;
+        rd_ts_t exp_us             = 0;
+        size_t body_size;
+
+        if (errstr_size > 0)
+                errstr[0] = '\0';
+        *credsp = NULL;
+
+        if (!region || !*region || !role_arn || !*role_arn ||
+            !role_session_name || !*role_session_name || !web_identity_token ||
+            !*web_identity_token) {
+                rd_snprintf(errstr, errstr_size,
+                            "invalid arguments to "
+                            "rd_kafka_aws_sts_assume_role_with_web_identity");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        url  = build_sts_endpoint_url(region);
+        herr = rd_http_req_init(rk, &hreq, url);
+        if (herr) {
+                rd_snprintf(errstr, errstr_size,
+                            "failed to initialise HTTP request to %s: %s", url,
+                            herr->errstr);
+                rd_http_error_destroy(herr);
+                rd_free(url);
+                return RD_KAFKA_RESP_ERR__TRANSPORT;
+        }
+
+        /* URL-encode every free-form input. RoleArn contains ":" and "/",
+         * RoleSessionName can contain "@=+-,.", and the JWT is base64url
+         * with "=" padding and "." separators — all must be percent-encoded
+         * for the form body. */
+        escaped_role_arn =
+            curl_easy_escape(hreq.hreq_curl, role_arn, (int)strlen(role_arn));
+        escaped_session_name = curl_easy_escape(
+            hreq.hreq_curl, role_session_name, (int)strlen(role_session_name));
+        escaped_token = curl_easy_escape(hreq.hreq_curl, web_identity_token,
+                                         (int)strlen(web_identity_token));
+        if (!escaped_role_arn || !escaped_session_name || !escaped_token) {
+                rd_snprintf(errstr, errstr_size,
+                            "failed to URL-encode AssumeRoleWithWebIdentity "
+                            "arguments");
+                result = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                goto cleanup;
+        }
+
+        body_size = strlen(escaped_role_arn) + strlen(escaped_session_name) +
+                    strlen(escaped_token) + 128;
+        body = rd_malloc(body_size);
+        rd_snprintf(body, body_size,
+                    "Action=AssumeRoleWithWebIdentity"
+                    "&Version=2011-06-15"
+                    "&RoleArn=%s"
+                    "&RoleSessionName=%s"
+                    "&WebIdentityToken=%s",
+                    escaped_role_arn, escaped_session_name, escaped_token);
+
+        /* No Authorization / X-Amz-Security-Token: this API is
+         * unauthenticated by design. */
+        headers = curl_slist_append(
+            headers, "Content-Type: application/x-www-form-urlencoded");
+        headers = curl_slist_append(headers, "Expect:");
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_HTTPHEADER, headers);
+
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_POST, 1L);
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDSIZE,
+                         (long)strlen(body));
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDS, body);
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT, 30);
+
+        herr     = rd_http_req_perform_sync(&hreq);
+        xml_body = read_response_body(&hreq);
+
+        if (herr) {
+                int http_code = herr->code;
+                format_sts_error(http_code, xml_body, errstr, errstr_size);
+                /* STS replaces the generic "failed" with the parsed
+                 * AssumeRoleWithWebIdentity-specific code. */
+                rd_http_error_destroy(herr);
+                herr   = NULL;
+                result = (http_code < 0) ? RD_KAFKA_RESP_ERR__TRANSPORT
+                                         : RD_KAFKA_RESP_ERR__AUTHENTICATION;
+                goto cleanup;
+        }
+
+        akid           = rd_aws_xml_extract(xml_body, "AccessKeyId");
+        secret         = rd_aws_xml_extract(xml_body, "SecretAccessKey");
+        session        = rd_aws_xml_extract(xml_body, "SessionToken");
+        expiration_str = rd_aws_xml_extract(xml_body, "Expiration");
+
+        if (!akid || !*akid || !secret || !*secret || !session || !*session) {
+                rd_snprintf(errstr, errstr_size,
+                            "AssumeRoleWithWebIdentity response missing "
+                            "required fields "
+                            "(AccessKeyId/SecretAccessKey/SessionToken)");
+                result = RD_KAFKA_RESP_ERR__BAD_MSG;
+                goto cleanup;
+        }
+
+        if (expiration_str && *expiration_str) {
+                if (!rd_aws_parse_iso8601_utc(expiration_str, &exp_epoch)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "AssumeRoleWithWebIdentity response: "
+                                    "malformed <Expiration>: %s",
+                                    expiration_str);
+                        result = RD_KAFKA_RESP_ERR__BAD_MSG;
+                        goto cleanup;
+                }
+                exp_us = rd_aws_epoch_to_monotonic_us(exp_epoch);
+        }
+
+        *credsp = rd_kafka_aws_credentials_new(akid, secret, session, exp_us);
+        result  = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+cleanup:
+        if (escaped_role_arn)
+                curl_free(escaped_role_arn);
+        if (escaped_session_name)
+                curl_free(escaped_session_name);
+        if (escaped_token)
+                curl_free(escaped_token);
+        RD_IF_FREE(herr, rd_http_error_destroy);
+        RD_IF_FREE(headers, curl_slist_free_all);
+        RD_IF_FREE(url, rd_free);
+        RD_IF_FREE(body, rd_free);
+        RD_IF_FREE(xml_body, rd_free);
+        RD_IF_FREE(akid, rd_free);
+        RD_IF_FREE(secret, rd_free);
+        RD_IF_FREE(session, rd_free);
+        RD_IF_FREE(expiration_str, rd_free);
+        rd_http_req_destroy(&hreq);
+        return result;
+}

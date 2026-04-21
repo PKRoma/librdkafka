@@ -332,7 +332,7 @@ Ordered by dependencies. Each phase has a concrete "definition of done" and test
 
 ---
 
-### Milestone 4 — ECS provider
+### Milestone 4 — ECS provider ✅ DONE (implementation + mock tests; real ECS/Fargate/Pod-Identity validation is a future bring-up)
 
 **Scope:** The two-mode ECS container provider.
 
@@ -349,7 +349,7 @@ Ordered by dependencies. Each phase has a concrete "definition of done" and test
 
 ---
 
-### Milestone 5 — web_identity provider + `AssumeRoleWithWebIdentity`
+### Milestone 5 — web_identity provider + `AssumeRoleWithWebIdentity` ✅ DONE (implementation + mock tests; real EKS IRSA validation requires an actual EKS deployment)
 
 **Scope:** File-sourced JWT → unauthenticated STS call → temp creds. Biggest single milestone.
 

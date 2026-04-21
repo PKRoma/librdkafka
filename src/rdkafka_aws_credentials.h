@@ -198,6 +198,69 @@ rd_kafka_aws_creds_provider_imds_new(rd_kafka_t *rk);
 
 
 /**
+ * @brief ECS/Fargate/EKS-Pod-Identity container credentials provider.
+ *
+ * Single provider handling the two modes the AWS SDK defines:
+ *
+ *   RELATIVE_URI mode (classic ECS / Fargate):
+ *     env AWS_CONTAINER_CREDENTIALS_RELATIVE_URI=<path>
+ *     -> GET http://169.254.170.2<path>
+ *     (no Authorization header; ECS agent authenticates by source IP)
+ *
+ *   FULL_URI mode (EKS Pod Identity, custom ECS-compatible agents):
+ *     env AWS_CONTAINER_CREDENTIALS_FULL_URI=<full URL>
+ *     -> GET <URL>   (allowlisted hosts only — see below)
+ *     Authorization bearer token from either:
+ *       AWS_CONTAINER_AUTHORIZATION_TOKEN       (static)
+ *       AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE  (re-read each fetch; Pod
+ *                                                Identity rotates it)
+ *
+ * Allowlist for FULL_URI mode (security boundary — FATAL if outside):
+ *   - localhost / 127.0.0.1 / ::1
+ *   - 169.254.170.2     (classic ECS agent)
+ *   - 169.254.170.23    (Pod Identity IPv4)
+ *   - fd00:ec2::23      (Pod Identity IPv6, bracket form)
+ *
+ * Result semantics:
+ *   - Neither RELATIVE_URI nor FULL_URI env var set  -> SKIP
+ *   - FULL_URI outside allowlist                     -> FATAL (security)
+ *   - Agent unreachable / HTTP error / bad JSON      -> FATAL
+ *     (unlike IMDSv2 which SKIPs on unreachable: if a container sets the
+ *     env var, it is declaring an expectation.)
+ */
+rd_kafka_aws_creds_provider_t *
+rd_kafka_aws_creds_provider_ecs_new(rd_kafka_t *rk);
+
+
+/**
+ * @brief Web-identity credentials provider — the EKS IRSA path.
+ *
+ * Reads a JWT from the file pointed to by `AWS_WEB_IDENTITY_TOKEN_FILE`
+ * (the token is rotated periodically by the Kubernetes kubelet, so we
+ * re-read it on every resolve), combines it with the role ARN from
+ * `AWS_ROLE_ARN`, and exchanges them for AWS temporary credentials via
+ * `sts:AssumeRoleWithWebIdentity` (unauthenticated).
+ *
+ * Environment variables consulted:
+ *   AWS_WEB_IDENTITY_TOKEN_FILE  — path to the JWT file (required)
+ *   AWS_ROLE_ARN                 — role ARN to assume (required)
+ *   AWS_ROLE_SESSION_NAME        — optional; auto-generated if absent
+ *
+ * Result semantics:
+ *   - Either env var unset / empty                     -> SKIP
+ *   - Token file missing or unreadable                 -> FATAL
+ *   - STS rejects the token (InvalidIdentityToken,
+ *     ExpiredToken, AccessDenied, etc.)                -> FATAL
+ *   - Success                                          -> OK with creds
+ *
+ * @param region  AWS region for the STS call. Required; no auto-default.
+ */
+rd_kafka_aws_creds_provider_t *
+rd_kafka_aws_creds_provider_web_identity_new(rd_kafka_t *rk,
+                                             const char *region);
+
+
+/**
  * @brief Chain of credentials providers; walks providers in order, returns
  *        first OK.
  *
