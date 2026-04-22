@@ -1,0 +1,8 @@
+# Explicit exported-symbols list for the macOS linker.
+#
+# Mach-O symbols are prefixed with '_'; list exactly the two plugin entry
+# points and nothing else. Passed via -Wl,-exported_symbols_list in
+# CMakeLists.txt on Apple platforms to compensate for macOS having no
+# direct equivalent of ELF's --exclude-libs,ALL.
+_conf_init
+_rd_kafka_oauthbearer_aws_register

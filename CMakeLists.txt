@@ -165,6 +165,13 @@ if(WITH_SSL AND WITH_CURL)
     set(WITH_OAUTHBEARER_OIDC ON)
 endif()
 
+# Optional: AWS OAUTHBEARER plugin (separate shared lib, loaded via
+# plugin.library.paths; statically links aws-sdk-cpp; see oauthbearer-aws/).
+option(WITH_PLUGIN_OAUTHBEARER_AWS "Build the AWS OAUTHBEARER plugin (requires aws-sdk-cpp in later milestones)" OFF)
+if(WITH_PLUGIN_OAUTHBEARER_AWS)
+    list(APPEND BUILT_WITH "PLUGIN_OAUTHBEARER_AWS")
+endif()
+
 # LZ4 {
 option(ENABLE_LZ4_EXT "Enable external LZ4 library support" ON)
 set(WITH_LZ4_EXT OFF)
@@ -280,6 +287,10 @@ install(
 
 add_subdirectory(src)
 add_subdirectory(src-cpp)
+
+if(WITH_PLUGIN_OAUTHBEARER_AWS)
+  add_subdirectory(oauthbearer-aws)
+endif()
 
 if(RDKAFKA_BUILD_EXAMPLES)
   add_subdirectory(examples)

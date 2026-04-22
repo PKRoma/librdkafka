@@ -1,0 +1,16 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: librdkafka-oauthbearer-aws
+Description: AWS OAUTHBEARER token provider plugin for librdkafka (static archive)
+Version: @PROJECT_VERSION@
+URL: https://github.com/confluentinc/librdkafka
+Requires.private: rdkafka
+Cflags: -I${includedir}
+Libs: -L${libdir} -lrdkafka-oauthbearer-aws
+# Libs.private is returned by `pkg-config --libs --static ...` and lists
+# the aws-sdk-cpp + CRT + system-level archives required when linking
+# the static variant. Shared users (dlopen path) don't need any of this.
+Libs.private: @OBA_PKGCONFIG_STATIC_LIBS@
