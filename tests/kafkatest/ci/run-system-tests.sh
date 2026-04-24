@@ -61,7 +61,7 @@ fi
 # list of test symbols (same format as the default below).
 DEFAULT_TESTS='tests/kafkatest/tests/client/pluggable_test.py::PluggableConsumerTest.test_start_stop@{"metadata_quorum":"ISOLATED_KRAFT"}
 tests/kafkatest/tests/client/compression_test.py::CompressionTest.test_compressed_topic@{"compression_types":["snappy","gzip","lz4","zstd","none"],"metadata_quorum":"ISOLATED_KRAFT"}
-tests/kafkatest/tests/client/consumer_test.py::OffsetValidationTest.test_fencing_static_consumer@{"num_conflict_consumers":1,"fencing_stage":"stable","metadata_quorum":"ISOLATED_KRAFT","group_protocol":"classic"}
+tests/kafkatest/tests/client/consumer_test.py::OffsetValidationTest.test_consumer_failure@{"clean_shutdown":true,"enable_autocommit":true,"metadata_quorum":"ISOLATED_KRAFT","group_protocol":"classic"}
 tests/kafkatest/tests/client/share_consumer_test.py::ShareConsumerTest.test_share_single_topic_partition@{"metadata_quorum":"ISOLATED_KRAFT","use_share_groups":true}
 tests/kafkatest/tests/client/truncation_test.py::TruncationTest.test_offset_truncate@{"metadata_quorum":"ISOLATED_KRAFT"}'
 TESTS_TO_RUN="${TESTS_TO_RUN:-${DEFAULT_TESTS}}"
