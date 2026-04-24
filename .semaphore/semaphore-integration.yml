@@ -95,6 +95,42 @@ blocks:
               ${KAFKA_VERSION} ${CP_VERSION} consumer
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
 
+  - name: 'Linux Ubuntu amd64: Ducktape system tests'
+    dependencies: []
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu24-04-amd64-2
+      env_vars:
+        - name: KAFKATEST_CACHE_TAG
+          value: '1'
+        - name: KAFKA_REF
+          value: '4.2.0'
+        - name: NUM_NODES
+          value: '11'
+        - name: DUCKER_MEM
+          value: '1300m'
+      prologue:
+        commands:
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+      epilogue:
+        commands:
+          - artifact push job artifacts/ducktape-results --destination ducktape-results --expire-in 30d || true
+      jobs:
+        - name: 'System tests against verifiable clients'
+          commands:
+            # Restore caches; non-fatal on first run.
+            - cache restore apache-kafka-${KAFKA_REF}-${KAFKATEST_CACHE_TAG} || true
+            - cache restore ducker-ak-image-${KAFKA_REF}-${KAFKATEST_CACHE_TAG} || true
+            - '[[ -f /tmp/ducker-ak-image.tar ]] && docker load -i /tmp/ducker-ak-image.tar || true'
+            - tests/kafkatest/ci/run-system-tests.sh
+            # Store caches for next run. The apache-kafka checkout lives
+            # alongside librdkafka (sibling directory); Gradle output is
+            # inside it. Image tarball is saved for fast re-load.
+            - cache store apache-kafka-${KAFKA_REF}-${KAFKATEST_CACHE_TAG} ../apache-kafka || true
+            - docker save ducker-ak-eclipse-temurin-17-jdk-jammy -o /tmp/ducker-ak-image.tar || true
+            - '[[ -f /tmp/ducker-ak-image.tar ]] && cache store ducker-ak-image-${KAFKA_REF}-${KAFKATEST_CACHE_TAG} /tmp/ducker-ak-image.tar || true'
+
 
   - name: 'Linux arm64: local quick tests'
     dependencies: []
