@@ -15,13 +15,13 @@
 
 set -euo pipefail
 
-# Resolve to absolute paths. Semaphore's $SEMAPHORE_GIT_DIR is a relative
-# path like "librdkafka"; ducker-ak's docker -v flag needs an absolute
-# path or Docker rejects the mount.
+# Resolve LIBRDKAFKA_DIR to an absolute path. On Semaphore the script
+# runs from inside the checkout (cwd == librdkafka repo), so `pwd` is
+# the right answer. If LIBRDKAFKA_DIR was set explicitly, honor it.
+# ducker-ak's docker -v flag needs an absolute path or Docker rejects
+# the mount.
 if [[ -n "${LIBRDKAFKA_DIR:-}" ]]; then
     LIBRDKAFKA_DIR="$(cd "${LIBRDKAFKA_DIR}" && pwd)"
-elif [[ -n "${SEMAPHORE_GIT_DIR:-}" ]]; then
-    LIBRDKAFKA_DIR="$(cd "${SEMAPHORE_GIT_DIR}" && pwd)"
 else
     LIBRDKAFKA_DIR="$(pwd)"
 fi
