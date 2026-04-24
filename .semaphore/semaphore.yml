@@ -446,7 +446,13 @@ promotions:
       - result: passed
         branch:
         - "master"
-  # Manual promotion only, the auto promotion on master happens after 
+  # Manual promotion to run apache/kafka Ducktape system tests against
+  # our librdkafka verifiable clients. Heavy — spins up a ducker-ak
+  # cluster of 11 containers on an amd64 16GB agent. Use for demos and
+  # branch validation.
+  - name: Run kafkatest system tests (Ducktape)
+    pipeline_file: kafkatest-system-tests.yml
+  # Manual promotion only, the auto promotion on master happens after
   # integration tests pass.
   - name: Run all tests
     pipeline_file: run-all-tests.yml

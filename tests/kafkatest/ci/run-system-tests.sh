@@ -15,11 +15,40 @@
 
 set -euo pipefail
 
-LIBRDKAFKA_DIR="${LIBRDKAFKA_DIR:-${SEMAPHORE_GIT_DIR:-$(pwd)}}"
+# Resolve to absolute paths. Semaphore's $SEMAPHORE_GIT_DIR is a relative
+# path like "librdkafka"; ducker-ak's docker -v flag needs an absolute
+# path or Docker rejects the mount.
+if [[ -n "${LIBRDKAFKA_DIR:-}" ]]; then
+    LIBRDKAFKA_DIR="$(cd "${LIBRDKAFKA_DIR}" && pwd)"
+elif [[ -n "${SEMAPHORE_GIT_DIR:-}" ]]; then
+    LIBRDKAFKA_DIR="$(cd "${SEMAPHORE_GIT_DIR}" && pwd)"
+else
+    LIBRDKAFKA_DIR="$(pwd)"
+fi
 KAFKA_REF="${KAFKA_REF:-4.2.0}"
 KAFKA_CHECKOUT="${KAFKA_CHECKOUT:-$(dirname "${LIBRDKAFKA_DIR}")/apache-kafka}"
 NUM_NODES="${NUM_NODES:-11}"
 DUCKER_MEM="${DUCKER_MEM:-1300m}"
+
+# Gradle (invoked below to build apache/kafka systemTestLibs) needs
+# JDK 17+ for Kafka 4.2.0. The Semaphore agent ships multiple JDKs;
+# if $JAVA_HOME isn't already 17+ or we can't tell, point to the 17
+# install if it exists.
+if [[ -z "${JAVA_HOME:-}" ]] || ! "${JAVA_HOME}/bin/java" -version 2>&1 | \
+      grep -qE 'version "(1[7-9]|[2-9][0-9])'; then
+    for cand in \
+        /usr/lib/jvm/java-17-openjdk-amd64 \
+        /usr/lib/jvm/temurin-17-jdk-amd64 \
+        /opt/java/openjdk \
+        $(ls -d /usr/lib/jvm/*17* 2>/dev/null | head -1); do
+        if [[ -x "${cand}/bin/java" ]]; then
+            export JAVA_HOME="${cand}"
+            export PATH="${JAVA_HOME}/bin:${PATH}"
+            echo "=== using JAVA_HOME=${JAVA_HOME} ==="
+            break
+        fi
+    done
+fi
 
 # Tests to run. Space-separated test spec paths (relative to the
 # apache/kafka repo). Can be overridden via env var.

@@ -1,0 +1,53 @@
+version: v1.0
+name: librdkafka-kafkatest-system-tests
+agent:
+  machine:
+    type: s1-prod-ubuntu24-04-amd64-2
+
+execution_time_limit:
+  hours: 2
+
+auto_cancel:
+  running:
+    when: "true"
+
+global_job_config:
+  prologue:
+    commands:
+      - checkout
+      - mkdir -p artifacts
+  env_vars:
+    - name: KAFKATEST_CACHE_TAG
+      value: '1'
+    - name: KAFKA_REF
+      value: '4.2.0'
+    - name: NUM_NODES
+      value: '11'
+    - name: DUCKER_MEM
+      value: '1300m'
+    - name: BUILDKIT_PROGRESS
+      value: plain
+
+blocks:
+  - name: 'Ducktape system tests against verifiable clients'
+    dependencies: []
+    task:
+      prologue:
+        commands:
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+          # Kafka 4.2.0's Gradle build needs JDK 17+.
+          - 'sem-version java 17 || true'
+          - 'java -version 2>&1 | head -1'
+      epilogue:
+        commands:
+          - artifact push job artifacts/ducktape-results --destination ducktape-results || true
+      jobs:
+        - name: 'System tests against verifiable clients'
+          commands:
+            - cache restore apache-kafka-${KAFKA_REF}-${KAFKATEST_CACHE_TAG} || true
+            - cache restore ducker-ak-image-${KAFKA_REF}-${KAFKATEST_CACHE_TAG} || true
+            - '[[ -f /tmp/ducker-ak-image.tar ]] && docker load -i /tmp/ducker-ak-image.tar || true'
+            - tests/kafkatest/ci/run-system-tests.sh
+            - cache store apache-kafka-${KAFKA_REF}-${KAFKATEST_CACHE_TAG} ../apache-kafka || true
+            - docker save ducker-ak-eclipse-temurin-17-jdk-jammy -o /tmp/ducker-ak-image.tar || true
+            - '[[ -f /tmp/ducker-ak-image.tar ]] && cache store ducker-ak-image-${KAFKA_REF}-${KAFKATEST_CACHE_TAG} /tmp/ducker-ak-image.tar || true'
