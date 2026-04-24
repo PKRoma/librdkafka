@@ -50,17 +50,21 @@ if [[ -z "${JAVA_HOME:-}" ]] || ! "${JAVA_HOME}/bin/java" -version 2>&1 | \
     done
 fi
 
-# Tests to run. Space-separated test spec paths (relative to the
-# apache/kafka repo). Can be overridden via env var.
+# Tests to run. One pinned variant per suite. Each line is a ducktape
+# "test symbol" — method path + injected args after @. The variants
+# below are all proven green (5 suites, 5 explicit variants).
 #
-# Demo set: one method per suite, all proven green locally. Combined
-# with --sample 1 below we get 5 actual test runs per CI invocation.
-TESTS_TO_RUN="${TESTS_TO_RUN:-\
-    tests/kafkatest/tests/client/pluggable_test.py::PluggableConsumerTest.test_start_stop \
-    tests/kafkatest/tests/client/compression_test.py::CompressionTest.test_compressed_topic \
-    tests/kafkatest/tests/client/consumer_test.py::OffsetValidationTest.test_fencing_static_consumer \
-    tests/kafkatest/tests/client/share_consumer_test.py::ShareConsumerTest.test_share_single_topic_partition \
-    tests/kafkatest/tests/client/truncation_test.py::TruncationTest.test_offset_truncate}"
+# Must be passed to ducktape via a file, not as argv, because
+# embedded double-quotes don't survive bash -c wrapping in ducker-ak.
+#
+# To override via env var, set TESTS_TO_RUN to a newline-separated
+# list of test symbols (same format as the default below).
+DEFAULT_TESTS='tests/kafkatest/tests/client/pluggable_test.py::PluggableConsumerTest.test_start_stop@{"metadata_quorum":"ISOLATED_KRAFT"}
+tests/kafkatest/tests/client/compression_test.py::CompressionTest.test_compressed_topic@{"compression_types":["snappy","gzip","lz4","zstd","none"],"metadata_quorum":"ISOLATED_KRAFT"}
+tests/kafkatest/tests/client/consumer_test.py::OffsetValidationTest.test_fencing_static_consumer@{"num_conflict_consumers":1,"fencing_stage":"stable","metadata_quorum":"ISOLATED_KRAFT","group_protocol":"classic"}
+tests/kafkatest/tests/client/share_consumer_test.py::ShareConsumerTest.test_share_single_topic_partition@{"metadata_quorum":"ISOLATED_KRAFT","use_share_groups":true}
+tests/kafkatest/tests/client/truncation_test.py::TruncationTest.test_offset_truncate@{"metadata_quorum":"ISOLATED_KRAFT"}'
+TESTS_TO_RUN="${TESTS_TO_RUN:-${DEFAULT_TESTS}}"
 
 echo "=== librdkafka system-test runner ==="
 echo "LIBRDKAFKA_DIR=${LIBRDKAFKA_DIR}"
@@ -145,15 +149,22 @@ trap cleanup EXIT
 # --- run tests -----------------------------------------------------------
 
 echo "=== running Ducktape tests ==="
-# Quoting: ducker-ak test builds `docker exec ducker01 bash -c "..."`.
-# Unquoted embedded quotes in test symbols break it; we pass simple
-# filename paths and let the matrix run. --sample 1 to pick one variant
-# per test (saves time; we can remove for full coverage later).
+# Write the pinned variants into a file on ducker01 and invoke
+# ducktape directly (bypassing `ducker-ak test`, which would mangle
+# the embedded quotes in the test symbols). ducktape accepts a
+# whitespace-separated list; we pass them as $(cat file) so each line
+# becomes a separate argv.
+TESTS_FILE="/tmp/kafkatest-tests-$$.txt"
+printf '%s\n' "${TESTS_TO_RUN}" | docker exec -i ducker01 bash -c "cat > ${TESTS_FILE}"
+echo "--- tests to run ---"
+docker exec ducker01 cat "${TESTS_FILE}"
+echo "---"
+
 set +e
-(cd "${KAFKA_CHECKOUT}" && \
- LIBRDKAFKA_DIR="${LIBRDKAFKA_DIR}" ./tests/docker/ducker-ak test \
-    ${TESTS_TO_RUN} \
-    -- --globals "/librdkafka/tests/kafkatest/globals.json" --sample 1)
+docker exec -w /opt/kafka-dev ducker01 bash -c \
+  "ducktape --cluster-file /opt/kafka-dev/tests/docker/build/cluster.json \
+    --globals /librdkafka/tests/kafkatest/globals.json \
+    \$(cat ${TESTS_FILE})"
 TEST_EXIT=$?
 set -e
 
@@ -163,6 +174,10 @@ ARTIFACT_DIR="${LIBRDKAFKA_DIR}/artifacts/ducktape-results"
 mkdir -p "${ARTIFACT_DIR}"
 docker cp ducker01:/opt/kafka-dev/results "${ARTIFACT_DIR}/" 2>/dev/null || \
     echo "(no results dir on ducker01)"
+# Ducktape creates a "latest" symlink inside results/ that causes the
+# Semaphore artifact uploader to fail (can't tar a dangling/self-ref
+# symlink). Remove it; the numbered session dir still carries the data.
+find "${ARTIFACT_DIR}" -type l -name latest -delete 2>/dev/null || true
 
 echo "=== run-system-tests.sh done, test_exit=${TEST_EXIT} ==="
 exit ${TEST_EXIT}
