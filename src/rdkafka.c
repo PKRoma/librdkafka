@@ -3230,7 +3230,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         }
 
         /*
-         * Step 1: If records were fetched and broker is not terminating,
+         * Step 1: If records were fetched and the instance is not terminating,
          * reset the global fetch guard so the next FANOUT can select
          * a new fetch broker.
          */

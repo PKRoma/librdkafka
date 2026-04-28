@@ -3605,7 +3605,8 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
                                      "Ignoring SHARE_FETCH op: "
                                      "instance or broker is terminating");
-                        rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__DESTROY);
+                        rd_kafka_op_reply(
+                            rko, rd_kafka_broker_destroy_error(rkb->rkb_rk));
                 } else if (rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
                         /* TODO KIP-932: The main thread should check
                          * broker state before enqueuing SHARE_FETCH
@@ -5102,12 +5103,12 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
         rd_assert(TAILQ_EMPTY(&rkb->rkb_retrybufs.rkbq_bufs));
         rd_assert(TAILQ_EMPTY(&rkb->rkb_toppars));
 
-        rd_assert(!rkb->rkb_share_async_ack_details);
-        rd_assert(!rkb->rkb_pending_commit_sync.sync_ack_details);
         rd_assert(
             TAILQ_EMPTY(&rkb->rkb_share_fetch_session.toppars_in_session));
         rd_assert(!rkb->rkb_share_fetch_session.toppars_to_add);
         rd_assert(!rkb->rkb_share_fetch_session.toppars_to_forget);
+        rd_assert(!rkb->rkb_share_async_ack_details);
+        rd_assert(!rkb->rkb_pending_commit_sync.sync_ack_details);
         rd_assert(!rkb->rkb_share_fetch_session.adding_toppars);
         rd_assert(!rkb->rkb_share_fetch_session.forgetting_toppars);
 

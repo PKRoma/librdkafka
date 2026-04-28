@@ -3917,8 +3917,7 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(NULL, rkcg->rkcg_rk->rk_consumer.wait_commit_cnt == 0);
         rd_kafka_assert(NULL, rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_TERM);
         rd_kafka_assert(
-            NULL, rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk) ||
-                      rkcg->rkcg_share.share_session_leave_remaining_cnt == 0);
+            NULL, rkcg->rkcg_share.share_session_leave_remaining_cnt == 0);
         rd_kafka_assert(
             NULL, rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0);
 
