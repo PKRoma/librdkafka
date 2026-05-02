@@ -344,6 +344,28 @@ rd_kafka_share_find_ack_batch_by_id(rd_list_t *ack_list,
 }
 
 /**
+ * @brief Reply to a SHARE_FETCH op with an error, propagating the
+ *        error to each batch in ack_details.
+ *
+ * On top-level error (err != 0), set err on each batch since the
+ * partition-level data was not parsed. On success (err == 0), the
+ * per-partition errors have already been set by the response parser
+ * and we leave ack_details untouched.
+ */
+void rd_kafka_share_fetch_op_reply_with_err(rd_kafka_op_t *rko,
+                                            rd_kafka_resp_err_t err) {
+        if (err && rko->rko_u.share_fetch.ack_details) {
+                rd_kafka_share_ack_batches_t *batch;
+                int i;
+                RD_LIST_FOREACH(batch, rko->rko_u.share_fetch.ack_details,
+                                i) {
+                        batch->rktpar->err = err;
+                }
+        }
+        rd_kafka_op_reply(rko, err);
+}
+
+/**
  * @brief Segregate ack batches from a FANOUT op by partition leader.
  *
  * For each ack batch, looks up the current leader broker via the
