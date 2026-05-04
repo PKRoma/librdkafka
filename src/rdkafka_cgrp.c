@@ -6171,6 +6171,7 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                          * ack_details. Destroy the container. */
                         rd_list_destroy(ack_batches);
                 }
+                /* TODO KIP-932: See how we can avoid locking the handle */
                 rd_kafka_rdlock(rkcg->rkcg_rk);
                 TAILQ_FOREACH(rkb, &rkcg->rkcg_rk->rk_brokers, rkb_link) {
                         if (rd_kafka_broker_or_instance_terminating(rkb) ||

@@ -5160,6 +5160,8 @@ rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
                      NULL))
                 return error;
 
+        /* TODO KIP-932: Check fatal error handling
+         * while implementing destroy */
         rk                                = rkshare->rkshare_rk;
         rkshare->rkshare_consumer_closing = rd_true;
         error                             = rd_kafka_consumer_close0(rk);
