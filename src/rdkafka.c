@@ -1400,6 +1400,18 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
                 thrd  = rd_malloc(sizeof(*thrd));
                 *thrd = rk->rk_internal_rkb->rkb_thread;
 
+                /* TODO KIP-932: Clear any share-session state that may
+                 * have been populated on the internal broker during a
+                 * leader migration (PARTITION_JOIN runs on whichever
+                 * broker the toppar is transiently delegated to,
+                 * including :0/internal). Once the leader-migration
+                 * path is fixed to skip non-LEARNED brokers, this
+                 * SESSION_CLEAR enqueue can be removed. */
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rk))
+                        rd_kafka_q_enq(
+                            rk->rk_internal_rkb->rkb_ops,
+                            rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_CLEAR));
+
                 /* Send op to trigger queue wake-up.
                  * WARNING: This is last time we can read
                  * from rk_internal_rkb in this thread! */
@@ -3241,10 +3253,10 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
          * Step 2: If the consumer has been marked for termination,
          * enqueue a session leave op on the replying broker thread and return
          */
-        if (!rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk) &&
-            rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {
-                rd_kafka_share_enqueue_fetch_op(rkcg->rkcg_rk, reply_rkb,
-                                                rd_false, rd_true);
+        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {
+                if (!rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk))
+                        rd_kafka_share_enqueue_fetch_op(
+                            rkcg->rkcg_rk, reply_rkb, rd_false, rd_true);
                 return RD_KAFKA_OP_RES_HANDLED;
         }
 
@@ -3255,20 +3267,47 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         if (rko_orig->rko_u.share_fetch.commit_sync_request_id != 0 &&
             rko_orig->rko_u.share_fetch.commit_sync_request_id ==
                 rkcg->rkcg_commit_sync_request.id) {
-                rd_kafka_topic_partition_list_t *ack_results =
-                    rko_orig->rko_u.share_fetch.ack_results;
 
-                if (ack_results) {
+                if (rko_orig->rko_err == RD_KAFKA_RESP_ERR__DESTROY) {
+                        rd_kafka_topic_partition_list_set_err(
+                            rkcg->rkcg_commit_sync_request.results,
+                            RD_KAFKA_RESP_ERR__DESTROY);
+                } else if (rko_orig->rko_err ==
+                           RD_KAFKA_RESP_ERR__DESTROY_BROKER) {
+                        rd_list_t *ack_details =
+                            rko_orig->rko_u.share_fetch.ack_details;
+                        rd_kafka_share_ack_batches_t *batch;
                         int k;
-                        for (k = 0; k < ack_results->cnt; k++) {
-                                rd_kafka_topic_partition_t *src =
-                                    &ack_results->elems[k];
+
+                        RD_LIST_FOREACH(batch, ack_details, k) {
                                 rd_kafka_topic_partition_t *dst =
                                     rd_kafka_topic_partition_list_find(
                                         rkcg->rkcg_commit_sync_request.results,
-                                        src->topic, src->partition);
+                                        batch->rktpar->topic,
+                                        batch->rktpar->partition);
                                 if (dst)
-                                        dst->err = src->err;
+                                        /* TODO KIP-932: Check if we should
+                                         * return __DESTROY or __DESTROY_BROKER
+                                         */
+                                        dst->err = RD_KAFKA_RESP_ERR__DESTROY;
+                        }
+                } else {
+                        rd_kafka_topic_partition_list_t *ack_results =
+                            rko_orig->rko_u.share_fetch.ack_results;
+
+                        if (ack_results) {
+                                int k;
+                                for (k = 0; k < ack_results->cnt; k++) {
+                                        rd_kafka_topic_partition_t *src =
+                                            &ack_results->elems[k];
+                                        rd_kafka_topic_partition_t *dst =
+                                            rd_kafka_topic_partition_list_find(
+                                                rkcg->rkcg_commit_sync_request
+                                                    .results,
+                                                src->topic, src->partition);
+                                        if (dst)
+                                                dst->err = src->err;
+                                }
                         }
                 }
 

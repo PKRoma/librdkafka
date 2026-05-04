@@ -1938,11 +1938,6 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
         if (rd_kafka_broker_is_any_err_destroy(err)) {
                 /* Session state is already cleared by SHARE_SESSION_CLEAR op,
                  * enqueued by rd_kafka_broker_decommission. */
-                if (rko_orig->rko_u.share_fetch.ack_details) {
-                        rd_list_destroy(
-                            rko_orig->rko_u.share_fetch.ack_details);
-                        rko_orig->rko_u.share_fetch.ack_details = NULL;
-                }
                 rd_kafka_op_reply(rko_orig, err);
                 return;
         }
@@ -2838,6 +2833,12 @@ void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb) {
                     rkb->rkb_share_fetch_session.forgetting_toppars);
                 rkb->rkb_share_fetch_session.forgetting_toppars = NULL;
         }
+
+        /*
+         * This allows us to avoid future changes to the closed share session
+         * Toppar add/remove functions do not allow updates if epoch is -1
+         * Avoid future changes to the closed share session */
+        rkb->rkb_share_fetch_session.epoch = -1;
 }
 
 void rd_kafka_broker_share_fetch_session_leave(rd_kafka_broker_t *rkb,

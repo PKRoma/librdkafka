@@ -288,6 +288,7 @@ _TEST_DECL(0177_share_consumer_transactions);
 _TEST_DECL(0178_share_consumer_close);
 _TEST_DECL(0178_share_consumer_close_local);
 _TEST_DECL(0179_share_consumer_destroy);
+_TEST_DECL(0179_share_consumer_destroy_local);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -572,6 +573,7 @@ struct test tests[] = {
     _TEST(0178_share_consumer_close, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0178_share_consumer_close_local, TEST_F_LOCAL),
     _TEST(0179_share_consumer_destroy, 0, TEST_BRKVER(0, 4, 0, 0)),
+    _TEST(0179_share_consumer_destroy_local, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
