@@ -1139,10 +1139,10 @@ void rd_kafka_oidc_token_metadata_aws_iam_refresh_cb(
     const char *oauthbearer_config,
     void *opaque) {
         /*
-        * TODO: Implement native librdkafka flow.
-        * Currently, this block serves as a defensive check to reject this
-        * configuration until the feature is fully supported.
-        */
+         * TODO: Implement native librdkafka flow.
+         * Currently, this block serves as a defensive check to reject this
+         * configuration until the feature is fully supported.
+         */
         rd_kafka_oauthbearer_set_token_failure(
             rk,
             "aws_iam authentication is handled by the high-level "
